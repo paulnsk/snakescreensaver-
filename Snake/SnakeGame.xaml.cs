@@ -167,7 +167,7 @@ public partial class SnakeGame : UserControl
 
     private void SyncSegs()
     {
-        var dur = TimeSpan.FromSeconds(_intervalSec * 0.95);
+        var dur = TimeSpan.FromSeconds(_intervalSec);
         for (int i = 0; i < _segs.Count; i++)
         {
             if (i >= _snake.Count) break;
@@ -585,9 +585,8 @@ public partial class SnakeGame : UserControl
 
         public void AnimateTo(Point center, TimeSpan dur)
         {
-            var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
-            var ax = new DoubleAnimation(Stored.X - Half, center.X - Half, dur) { EasingFunction = ease };
-            var ay = new DoubleAnimation(Stored.Y - Half, center.Y - Half, dur) { EasingFunction = ease };
+            var ax = new DoubleAnimation(Stored.X - Half, center.X - Half, dur);
+            var ay = new DoubleAnimation(Stored.Y - Half, center.Y - Half, dur);
             Ell.BeginAnimation(Canvas.LeftProperty, ax);
             Ell.BeginAnimation(Canvas.TopProperty, ay);
             Stored = center;
