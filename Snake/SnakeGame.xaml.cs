@@ -1,14 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using Path = System.Windows.Shapes.Path;
 
 namespace SnakeScreensaver.Snake;
 
@@ -19,6 +21,17 @@ public partial class SnakeGame : UserControl
     private int _cols, _rows;
     private double _originX, _originY;
 
+    private readonly Random _rng = new(42);
+    private readonly Stopwatch _sw = new();
+    private bool _started;
+    private bool _dead;
+    private double _deadAt;
+    private double Now => _sw.Elapsed.TotalSeconds;
+
+    public enum RenderMode { Balls = 0, Ribbon = 1 }
+    private RenderMode _mode = RenderMode.Balls;
+    private ContextMenu _menu = null!;
+
     private readonly List<(int X, int Y)> _snake = new();
     private readonly List<Seg> _segs = new();
     private readonly List<Food> _foods = new();
@@ -26,18 +39,55 @@ public partial class SnakeGame : UserControl
     private int _pendingGrowth;
     private double _intervalSec = 0.13;
     private double _lastStepTime;
-    private bool _dead;
-    private double _deadAt;
-    private readonly Random _rng = new(42);
-    private readonly Stopwatch _sw = new();
-    private bool _started;
+
+    private Path? _ribbonPath;
+    private LinearGradientBrush? _ribbonStroke;
+    private LinearGradientBrush? _ribbonAlpha;
+    private DropShadowEffect? _ribbonEffect;
+    private readonly List<Point> _ribbonSamples = new();
+    private (int dx, int dy) _ribbonDir = (1, 0);
+    private (int X, int Y) _ribbonHeadCell;
+    private double _ribbonTargetLenPx;
+    private double _ribbonSpeed = 230;
+    private const double RibbonSpacing = 4.0;
+    private double _ribbonLastT;
+    private bool _ribbonReady;
 
     public SnakeGame()
     {
         InitializeComponent();
+        _mode = Settings.Load();
+        BuildMenu();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         SizeChanged += (_, _) => InitFromSize(true);
+    }
+
+    private void BuildMenu()
+    {
+        _menu = new ContextMenu();
+        var m1 = new MenuItem { Header = "Balls (segmented)", Tag = RenderMode.Balls };
+        var m2 = new MenuItem { Header = "Ribbon (continuous path)", Tag = RenderMode.Ribbon };
+        m1.Click += (_, _) => SwitchMode(RenderMode.Balls);
+        m2.Click += (_, _) => SwitchMode(RenderMode.Ribbon);
+        _menu.Items.Add(m1);
+        _menu.Items.Add(m2);
+        UpdateMenuChecks();
+    }
+
+    private void UpdateMenuChecks()
+    {
+        ((MenuItem)_menu.Items[0]).IsChecked = _mode == RenderMode.Balls;
+        ((MenuItem)_menu.Items[1]).IsChecked = _mode == RenderMode.Ribbon;
+    }
+
+    private void SwitchMode(RenderMode m)
+    {
+        if (m == _mode) return;
+        _mode = m;
+        Settings.Save(m);
+        UpdateMenuChecks();
+        Start();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -69,23 +119,28 @@ public partial class SnakeGame : UserControl
         }
     }
 
-    private double Now => _sw.Elapsed.TotalSeconds;
-
     private void OnRender(object? sender, EventArgs e)
     {
+        var t = Now;
         if (_dead)
         {
-            if (Now - _deadAt >= 1.7) Start();
+            if (t - _deadAt >= 1.7) Start();
             return;
         }
         if (_cols == 0) return;
-        var t = Now;
-        if (t - _lastStepTime >= _intervalSec)
+        if (_mode == RenderMode.Balls)
         {
-            _lastStepTime = t;
-            Step();
+            if (t - _lastStepTime >= _intervalSec)
+            {
+                _lastStepTime = t;
+                StepBalls();
+            }
+            UpdateColorsBalls(t);
         }
-        UpdateColors(t);
+        else
+        {
+            UpdateRibbon(t);
+        }
     }
 
     private void Start()
@@ -98,9 +153,22 @@ public partial class SnakeGame : UserControl
         _snake.Clear();
         _pendingGrowth = 0;
         _intervalSec = 0.13;
+        _ribbonSamples.Clear();
+        _ribbonReady = false;
 
-        BuildHaze();
+        if (_mode == RenderMode.Balls) StartBalls();
+        else StartRibbon();
 
+        for (int i = 0; i < 5; i++) SpawnFood();
+
+        _dead = false;
+        _lastStepTime = Now;
+        _ribbonLastT = Now;
+    }
+
+    private void StartBalls()
+    {
+        EnsureRibbonPath(false);
         var cx = _cols / 2;
         var cy = _rows / 2;
         for (int i = 3; i >= 0; i--)
@@ -115,38 +183,115 @@ public partial class SnakeGame : UserControl
             _segs.Add(seg);
         }
         _dirX = 1; _dirY = 0;
+    }
 
-        for (int i = 0; i < 5; i++) SpawnFood();
+    private void StartRibbon()
+    {
+        EnsureRibbonPath(true);
+        _ribbonTargetLenPx = 4 * Cell;
+        _ribbonSpeed = 230;
+        _ribbonDir = (1, 0);
+        var cx = _cols / 2;
+        var cy = _rows / 2;
+        var headPos = CellCenter((cx, cy));
+        _ribbonSamples.Clear();
+        _ribbonSamples.Add(headPos);
+        var backDx = -_ribbonDir.dx;
+        var backDy = -_ribbonDir.dy;
+        var n = (int)Math.Ceiling((_ribbonTargetLenPx + Cell) / RibbonSpacing) + 1;
+        for (int i = 1; i < n; i++)
+            _ribbonSamples.Add(new Point(headPos.X + backDx * RibbonSpacing * i, headPos.Y + backDy * RibbonSpacing * i));
+        _ribbonHeadCell = (cx, cy);
+        _ribbonReady = true;
+        _ribbonLastT = Now;
+    }
 
-        _dead = false;
-        _lastStepTime = Now;
+    private void EnsureRibbonPath(bool on)
+    {
+        if (on && _ribbonPath == null)
+        {
+            _ribbonPath = new Path
+            {
+                StrokeThickness = Cell * 0.78,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Round,
+                UseLayoutRounding = true,
+                ContextMenu = _menu
+            };
+            _ribbonStroke = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute };
+            for (int i = 0; i < 6; i++)
+                _ribbonStroke.GradientStops.Add(new GradientStop(Colors.White, i / 5.0));
+            _ribbonPath.Stroke = _ribbonStroke;
+
+            _ribbonAlpha = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute };
+            _ribbonAlpha.GradientStops.Add(new GradientStop(Color.FromRgb(0, 0, 0), 0));
+            _ribbonAlpha.GradientStops.Add(new GradientStop(Color.FromRgb(0, 0, 0), 0.82));
+            _ribbonAlpha.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 0, 0), 1));
+            _ribbonPath.OpacityMask = _ribbonAlpha;
+
+            _ribbonEffect = new DropShadowEffect
+            {
+                Color = Colors.Magenta,
+                BlurRadius = 30,
+                ShadowDepth = 6,
+                Direction = 320,
+                Opacity = 0.95,
+                RenderingBias = RenderingBias.Performance
+            };
+            _ribbonPath.Effect = _ribbonEffect;
+
+            Field.Children.Add(_ribbonPath);
+        }
+        if (!on && _ribbonPath != null)
+        {
+            Field.Children.Remove(_ribbonPath);
+            _ribbonPath = null;
+            _ribbonStroke = null;
+            _ribbonAlpha = null;
+            _ribbonEffect = null;
+        }
     }
 
     private Point CellCenter((int X, int Y) cell)
         => new(_originX + (cell.X + 0.5) * Cell, _originY + (cell.Y + 0.5) * Cell);
 
-    private void Step()
+    private (int X, int Y) PixelToCell(Point p)
     {
-        var (dx, dy) = ChooseDir();
+        var x = (int)((p.X - _originX) / Cell);
+        var y = (int)((p.Y - _originY) / Cell);
+        return (x, y);
+    }
+
+    private static double Len(Point a, Point b)
+    {
+        var dx = a.X - b.X;
+        var dy = a.Y - b.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+
+    private void StepBalls()
+    {
+        var (dx, dy) = ChooseDirBalls();
         if (_snake.Count > 1 && dx == -_dirX && dy == -_dirY) { dx = _dirX; dy = _dirY; }
         _dirX = dx; _dirY = dy;
 
         var head = _snake[0];
         var nh = (X: head.X + dx, Y: head.Y + dy);
 
-        if (nh.X < 0 || nh.Y < 0 || nh.X >= _cols || nh.Y >= _rows) { Die(); return; }
+        if (nh.X < 0 || nh.Y < 0 || nh.X >= _cols || nh.Y >= _rows) { DieBalls(); return; }
 
         bool growing = _pendingGrowth > 0;
         var checkCount = growing ? _snake.Count : _snake.Count - 1;
         for (int i = 0; i < checkCount; i++)
-            if (_snake[i].X == nh.X && _snake[i].Y == nh.Y) { Die(); return; }
+            if (_snake[i].X == nh.X && _snake[i].Y == nh.Y) { DieBalls(); return; }
 
         var foodIdx = _foods.FindIndex(f => f.Cell.X == nh.X && f.Cell.Y == nh.Y);
         if (foodIdx >= 0)
         {
             var f = _foods[foodIdx];
             _pendingGrowth += f.Growth;
-            EatFood(f);
+            EatFoodShared(f);
             SpawnFood();
         }
 
@@ -187,18 +332,15 @@ public partial class SnakeGame : UserControl
         _segs.Insert(0, seg);
     }
 
-    private (int dx, int dy) ChooseDir()
+    private (int dx, int dy) ChooseDirBalls()
     {
         var head = _snake[0];
         if (_foods.Count == 0) return (_dirX, _dirY);
-
         var target = _foods.OrderBy(f => Math.Abs(f.Cell.X - head.X) + Math.Abs(f.Cell.Y - head.Y)).First().Cell;
 
         bool growing = _pendingGrowth > 0;
         var blocked = new HashSet<(int, int)>(growing ? _snake : _snake.Take(_snake.Count - 1).Select(c => (c.X, c.Y)));
-
-        if (BfsFirst((head.X, head.Y), (target.X, target.Y), blocked, out var step))
-            return step;
+        if (BfsFirst((head.X, head.Y), (target.X, target.Y), blocked, out var step)) return step;
 
         var priority = new List<(int dx, int dy)> { (_dirX, _dirY), TurnLeft(_dirX, _dirY), TurnRight(_dirX, _dirY) };
         priority = priority.Where(d => !(d.dx == -_dirX && d.dy == -_dirY)).ToList();
@@ -212,45 +354,154 @@ public partial class SnakeGame : UserControl
         return (_dirX, _dirY);
     }
 
-    private static (int dx, int dy) TurnLeft(int dx, int dy) => (-dy, dx);
-    private static (int dx, int dy) TurnRight(int dx, int dy) => (dy, -dx);
-
-    private bool BfsFirst((int X, int Y) from, (int X, int Y) target, HashSet<(int, int)> blocked, out (int dx, int dy) step)
+    private void UpdateBallsColors(double t)
     {
-        step = (0, 0);
-        var prev = new Dictionary<(int, int), (int, int)>();
-        var q = new Queue<(int, int)>();
-        var s = (from.X, from.Y);
-        prev[s] = (-1000, -1000);
-        q.Enqueue(s);
-        var opts = new[] { (1, 0), (-1, 0), (0, 1), (0, -1) };
-
-        while (q.Count > 0)
+        for (int i = 0; i < _segs.Count; i++)
         {
-            var cur = q.Dequeue();
-            if (cur.Item1 == target.X && cur.Item2 == target.Y) break;
-            foreach (var (ox, oy) in opts)
-            {
-                var n = (cur.Item1 + ox, cur.Item2 + oy);
-                if (n.Item1 < 0 || n.Item2 < 0 || n.Item1 >= _cols || n.Item2 >= _rows) continue;
-                var isTarget = n.Item1 == target.X && n.Item2 == target.Y;
-                if (!isTarget && blocked.Contains(n)) continue;
-                if (!prev.ContainsKey(n))
-                {
-                    prev[n] = cur;
-                    q.Enqueue(n);
-                }
-            }
+            var s = _segs[i];
+            var hue = (t * 55.0 + i * 11.0) % 360.0;
+            s.Fill.GradientStops[0].Color = Hsl(hue, 0.85, 0.82);
+            s.Fill.GradientStops[1].Color = Hsl(hue, 1.0, 0.5);
+            s.Stroke.Color = Hsl((hue + 320) % 360.0, 1.0, 0.6);
+            s.Shadow.Color = Hsl(hue, 1.0, 0.55);
         }
-
-        if (!prev.ContainsKey((target.X, target.Y))) return false;
-        var c = (target.X, target.Y);
-        while (prev[c] != s) c = prev[c];
-        step = (c.Item1 - from.X, c.Item2 - from.Y);
-        return true;
     }
 
-    private void Die()
+    private void UpdateColorsBalls(double t) => UpdateBallsColors(t);
+
+    private void UpdateRibbon(double t)
+    {
+        if (!_ribbonReady || _ribbonSamples.Count < 2) return;
+        var dt = Math.Max(0.0001, Math.Min(0.05, t - _ribbonLastT));
+        _ribbonLastT = t;
+
+        var head = _ribbonSamples[0];
+        var newHead = new Point(head.X + _ribbonDir.dx * _ribbonSpeed * dt, head.Y + _ribbonDir.dy * _ribbonSpeed * dt);
+        _ribbonSamples.Insert(0, newHead);
+
+        var nc = PixelToCell(newHead);
+        if (nc.X != _ribbonHeadCell.X || nc.Y != _ribbonHeadCell.Y)
+        {
+            OnRibbonCellCrossed(nc);
+            if (_dead) return;
+        }
+        _ribbonHeadCell = nc;
+
+        var lenCells = Math.Max(1, _ribbonTargetLenPx / Cell);
+        _ribbonSpeed = 230 + Math.Min(120, lenCells * 4);
+
+        TrimRibbonTo(_ribbonTargetLenPx);
+        DrawRibbon(t);
+    }
+
+    private void OnRibbonCellCrossed((int X, int Y) nc)
+    {
+        if (nc.X < 0 || nc.Y < 0 || nc.X >= _cols || nc.Y >= _rows) { DieRibbon(); return; }
+
+        var body = BodyCellsFromTail();
+        if (body.Contains((nc.X, nc.Y))) { DieRibbon(); return; }
+
+        var foodIdx = _foods.FindIndex(f => f.Cell.X == nc.X && f.Cell.Y == nc.Y);
+        if (foodIdx >= 0)
+        {
+            var f = _foods[foodIdx];
+            _ribbonTargetLenPx += f.Growth * Cell;
+            EatFoodShared(f);
+            SpawnFood();
+        }
+
+        var newDir = ChooseDirForRibbon(nc, body);
+        if (newDir.dx == -_ribbonDir.dx && newDir.dy == -_ribbonDir.dy) newDir = _ribbonDir;
+        _ribbonDir = newDir;
+    }
+
+    private HashSet<(int, int)> BodyCellsFromTail()
+    {
+        var set = new HashSet<(int, int)>();
+        for (int i = 1; i < _ribbonSamples.Count; i++)
+        {
+            var c = PixelToCell(_ribbonSamples[i]);
+            set.Add((c.X, c.Y));
+        }
+        return set;
+    }
+
+    private (int dx, int dy) ChooseDirForRibbon((int X, int Y) head, HashSet<(int, int)> blocked)
+    {
+        if (_foods.Count == 0) return _ribbonDir;
+        var target = _foods.OrderBy(f => Math.Abs(f.Cell.X - head.X) + Math.Abs(f.Cell.Y - head.Y)).First().Cell;
+        if (BfsFirst((head.X, head.Y), (target.X, target.Y), blocked, out var step)) return step;
+
+        var priority = new List<(int dx, int dy)> { _ribbonDir, TurnLeft(_ribbonDir.dx, _ribbonDir.dy), TurnRight(_ribbonDir.dx, _ribbonDir.dy) };
+        priority = priority.Where(d => !(d.dx == -_ribbonDir.dx && d.dy == -_ribbonDir.dy)).ToList();
+        foreach (var (dx, dy) in priority)
+        {
+            var nx = head.X + dx;
+            var ny = head.Y + dy;
+            if (nx >= 0 && ny >= 0 && nx < _cols && ny < _rows && !blocked.Contains((nx, ny)))
+                return (dx, dy);
+        }
+        return _ribbonDir;
+    }
+
+    private void TrimRibbonTo(double target)
+    {
+        if (_ribbonSamples.Count < 2) return;
+        double acc = 0;
+        double prevAcc = 0;
+        int cutIndex = -1;
+        for (int i = 1; i < _ribbonSamples.Count; i++)
+        {
+            var d = Len(_ribbonSamples[i - 1], _ribbonSamples[i]);
+            prevAcc = acc;
+            acc += d;
+            if (acc >= target) { cutIndex = i; break; }
+        }
+        if (cutIndex < 0) return;
+
+        var a = _ribbonSamples[cutIndex - 1];
+        var b = _ribbonSamples[cutIndex];
+        var dx = b.X - a.X;
+        var dy = b.Y - a.Y;
+        var dlen = Math.Sqrt(dx * dx + dy * dy);
+        var remain = target - prevAcc;
+        var ratio = dlen > 0 ? remain / dlen : 0;
+        if (ratio < 0) ratio = 0;
+        _ribbonSamples[cutIndex] = new Point(a.X + dx * ratio, a.Y + dy * ratio);
+        while (_ribbonSamples.Count > cutIndex + 1) _ribbonSamples.RemoveAt(_ribbonSamples.Count - 1);
+    }
+
+    private void DrawRibbon(double t)
+    {
+        if (_ribbonPath == null || _ribbonStroke == null || _ribbonAlpha == null || _ribbonEffect == null) return;
+        if (_ribbonSamples.Count < 2) return;
+
+        var geo = new PathGeometry();
+        var fig = new PathFigure { StartPoint = _ribbonSamples[0], IsClosed = false, IsFilled = false };
+        for (int i = 1; i < _ribbonSamples.Count; i++)
+            fig.Segments.Add(new LineSegment(_ribbonSamples[i], true) { IsSmoothJoin = true });
+        geo.Figures.Add(fig);
+        _ribbonPath.Data = geo;
+
+        var head = _ribbonSamples[0];
+        var tail = _ribbonSamples[^1];
+        if (Len(head, tail) < 0.001) tail = new Point(head.X + 1, head.Y);
+
+        _ribbonStroke.StartPoint = head;
+        _ribbonStroke.EndPoint = tail;
+        _ribbonAlpha.StartPoint = head;
+        _ribbonAlpha.EndPoint = tail;
+
+        var n = _ribbonStroke.GradientStops.Count;
+        for (int i = 0; i < n; i++)
+        {
+            var hue = (t * 45.0 + i * 55.0) % 360.0;
+            _ribbonStroke.GradientStops[i].Color = Hsl(hue, 1.0, 0.62);
+        }
+        _ribbonEffect.Color = Hsl((t * 60.0) % 360.0, 1.0, 0.55);
+    }
+
+    private void DieBalls()
     {
         _dead = true;
         _deadAt = Now;
@@ -269,24 +520,47 @@ public partial class SnakeGame : UserControl
         }
     }
 
-    private void EatFood(Food f)
+    private void DieRibbon()
+    {
+        _dead = true;
+        _deadAt = Now;
+        var samples = _ribbonSamples.ToList();
+        for (int i = 0; i < samples.Count; i += Math.Max(1, samples.Count / 16))
+        {
+            var hue = (i * 11.0 + Now * 55.0) % 360.0;
+            TriggerBurst(samples[i], hue, 12);
+        }
+        if (_ribbonPath != null)
+        {
+            var fade = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.6))
+            { EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut } };
+            _ribbonPath.BeginAnimation(OpacityProperty, fade);
+        }
+    }
+
+    private void EatFoodShared(Food f)
     {
         Field.Children.Remove(f.Shape);
         _foods.Remove(f);
         var pos = CellCenter(f.Cell);
-        TriggerBurst(pos, f.Hue, 30);
+        TriggerBurst(pos, f.Hue, 28);
 
-        var head = _segs.FirstOrDefault();
-        if (head == null) return;
-        var scale = new ScaleTransform(1, 1) { CenterX = head.Half, CenterY = head.Half };
-        head.Ell.RenderTransform = scale;
-        var pop = new DoubleAnimation(1.0, 1.45, TimeSpan.FromSeconds(0.22))
+        if (_mode == RenderMode.Balls)
         {
-            AutoReverse = true,
-            EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut }
-        };
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+            var head = _segs.FirstOrDefault();
+            if (head != null)
+            {
+                var scale = new ScaleTransform(1, 1) { CenterX = head.Half, CenterY = head.Half };
+                head.Ell.RenderTransform = scale;
+                var pop = new DoubleAnimation(1.0, 1.45, TimeSpan.FromSeconds(0.22))
+                {
+                    AutoReverse = true,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut }
+                };
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+            }
+        }
     }
 
     private void TriggerBurst(Point center, double hue, int count)
@@ -313,13 +587,9 @@ public partial class SnakeGame : UserControl
             var dy = Math.Sin(ang) * spd;
             var dur = TimeSpan.FromSeconds(_rng.NextDouble() * 0.45 + 0.55);
             var ax = new DoubleAnimation(center.X + offX, center.X + offX + dx, dur)
-            {
-                EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut }
-            };
+            { EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut } };
             var ay = new DoubleAnimation(center.Y + offY, center.Y + offY + dy, dur)
-            {
-                EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut }
-            };
+            { EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut } };
             var ao = new DoubleAnimation(1, 0, dur) { EasingFunction = new SineEase { EasingMode = EasingMode.EaseIn } };
             var grow = new DoubleAnimation(1, 0.2, dur);
 
@@ -335,21 +605,6 @@ public partial class SnakeGame : UserControl
         }
     }
 
-    private void UpdateColors(double t)
-    {
-        for (int i = 0; i < _segs.Count; i++)
-        {
-            var s = _segs[i];
-            var hue = (t * 55.0 + i * 11.0) % 360.0;
-            var core = Hsl(hue, 0.85, 0.82);
-            var edge = Hsl(hue, 1.0, 0.5);
-            s.Fill.GradientStops[0].Color = core;
-            s.Fill.GradientStops[1].Color = edge;
-            s.Stroke.Color = Hsl((hue + 320) % 360.0, 1.0, 0.6);
-            s.Shadow.Color = Hsl(hue, 1.0, 0.55);
-        }
-    }
-
     private Seg CreateSeg()
     {
         var ell = new Ellipse
@@ -357,7 +612,8 @@ public partial class SnakeGame : UserControl
             Width = Cell * 0.92,
             Height = Cell * 0.92,
             StrokeThickness = 2,
-            RenderTransformOrigin = new Point(0.5, 0.5)
+            RenderTransformOrigin = new Point(0.5, 0.5),
+            ContextMenu = _menu
         };
         var fill = new RadialGradientBrush
         {
@@ -394,7 +650,10 @@ public partial class SnakeGame : UserControl
 
     private void SpawnFood()
     {
-        var occupied = new HashSet<(int, int)>(_snake.Select(c => (c.X, c.Y)));
+        IEnumerable<(int, int)> baseOcc = _mode == RenderMode.Ribbon
+            ? BodyCellsFromTail()
+            : _snake.Select(c => (c.X, c.Y));
+        var occupied = new HashSet<(int, int)>(baseOcc);
         foreach (var f in _foods) occupied.Add((f.Cell.X, f.Cell.Y));
 
         (int X, int Y)? cell = null;
@@ -405,9 +664,9 @@ public partial class SnakeGame : UserControl
         }
         if (cell == null)
         {
-            for (int y = 0; y < _rows; y++)
-                for (int x = 0; x < _cols; x++)
-                    if (!occupied.Contains((x, y))) { cell = (x, y); break; }
+            for (int y = 0; y < _rows && cell == null; y++)
+                for (int x = 0; x < _cols && cell == null; x++)
+                    if (!occupied.Contains((x, y))) cell = (x, y);
         }
         if (cell == null) return;
         CreateFood(cell.Value);
@@ -450,6 +709,7 @@ public partial class SnakeGame : UserControl
         sh.Stroke = new SolidColorBrush(Hsl((hue + 320) % 360.0, 1.0, 0.7));
         sh.StrokeThickness = 1.8;
         sh.UseLayoutRounding = true;
+        sh.ContextMenu = _menu;
 
         var dse = new DropShadowEffect
         {
@@ -510,48 +770,42 @@ public partial class SnakeGame : UserControl
         return Geometry.Parse(data);
     }
 
-    private void BuildHaze()
+    private static (int dx, int dy) TurnLeft(int dx, int dy) => (-dy, dx);
+    private static (int dx, int dy) TurnRight(int dx, int dy) => (dy, -dx);
+
+    private bool BfsFirst((int X, int Y) from, (int X, int Y) target, HashSet<(int, int)> blocked, out (int dx, int dy) step)
     {
-        var hues = new[] { 0.0, 90.0, 180.0, 270.0 };
-        for (int i = 0; i < hues.Length; i++)
+        step = (0, 0);
+        var prev = new Dictionary<(int, int), (int, int)>();
+        var q = new Queue<(int, int)>();
+        var s = (from.X, from.Y);
+        prev[s] = (-1000, -1000);
+        q.Enqueue(s);
+        var opts = new[] { (1, 0), (-1, 0), (0, 1), (0, -1) };
+
+        while (q.Count > 0)
         {
-            var size = _rng.Next(700, 1100);
-            var hue = (hues[i] + _rng.Next(-20, 20)) % 360.0;
-            var brush = new RadialGradientBrush
+            var cur = q.Dequeue();
+            if (cur.Item1 == target.X && cur.Item2 == target.Y) break;
+            foreach (var (ox, oy) in opts)
             {
-                GradientOrigin = new Point(0.5, 0.5),
-                Center = new Point(0.5, 0.5),
-                RadiusX = 0.5,
-                RadiusY = 0.5
-            };
-            brush.GradientStops.Add(new GradientStop(Color.FromArgb(60, Hsl(hue, 1, 0.55).R, Hsl(hue, 1, 0.55).G, Hsl(hue, 1, 0.55).B), 0));
-            brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, Hsl(hue, 1, 0.55).R, Hsl(hue, 1, 0.55).G, Hsl(hue, 1, 0.55).B), 1));
-
-            var e = new Ellipse
-            {
-                Width = size,
-                Height = size,
-                Fill = brush,
-                Opacity = 0.32
-            };
-
-            var startX = _rng.Next(-(int)e.Width / 2, Math.Max(0, (int)(ActualWidth - e.Width / 2)));
-            var startY = _rng.Next(-(int)e.Height / 2, Math.Max(0, (int)(ActualHeight - e.Height / 2)));
-            Canvas.SetLeft(e, startX);
-            Canvas.SetTop(e, startY);
-
-            var dur = TimeSpan.FromSeconds(_rng.Next(18, 34));
-            var dx = _rng.Next(-(int)e.Width, (int)e.Width + (int)ActualWidth);
-            var dy = _rng.Next(-(int)e.Height, (int)e.Height + (int)ActualHeight);
-            e.BeginAnimation(Canvas.LeftProperty,
-                new DoubleAnimation(startX, dx, dur)
-                { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } });
-            e.BeginAnimation(Canvas.TopProperty,
-                new DoubleAnimation(startY, dy, dur)
-                { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } });
-
-            Field.Children.Add(e);
+                var n = (cur.Item1 + ox, cur.Item2 + oy);
+                if (n.Item1 < 0 || n.Item2 < 0 || n.Item1 >= _cols || n.Item2 >= _rows) continue;
+                var isTarget = n.Item1 == target.X && n.Item2 == target.Y;
+                if (!isTarget && blocked.Contains(n)) continue;
+                if (!prev.ContainsKey(n))
+                {
+                    prev[n] = cur;
+                    q.Enqueue(n);
+                }
+            }
         }
+
+        if (!prev.ContainsKey((target.X, target.Y))) return false;
+        var c = (target.X, target.Y);
+        while (prev[c] != s) c = prev[c];
+        step = (c.Item1 - from.X, c.Item2 - from.Y);
+        return true;
     }
 
     private static Color Hsl(double h, double s, double l)
@@ -599,5 +853,36 @@ public partial class SnakeGame : UserControl
         public double Hue;
         public Shape Shape = null!;
         public int Growth;
+    }
+
+    internal static class Settings
+    {
+        private static string Dir => System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SnakeScreensaver");
+        private static string FilePath => System.IO.Path.Combine(Dir, "settings.json");
+
+        public static RenderMode Load()
+        {
+            try
+            {
+                if (System.IO.File.Exists(FilePath))
+                {
+                    var txt = System.IO.File.ReadAllText(FilePath);
+                    var m = Regex.Match(txt, "\"Mode\"\\s*:\\s*(\\d+)");
+                    if (m.Success) return (RenderMode)int.Parse(m.Groups[1].Value);
+                }
+            }
+            catch { }
+            return RenderMode.Balls;
+        }
+
+        public static void Save(RenderMode mode)
+        {
+            try
+            {
+                if (!Directory.Exists(Dir)) Directory.CreateDirectory(Dir);
+                System.IO.File.WriteAllText(FilePath, "{ \"Mode\": " + (int)mode + " }");
+            }
+            catch { }
+        }
     }
 }
