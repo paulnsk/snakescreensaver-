@@ -30,6 +30,7 @@ public partial class SnakeGame : UserControl
 
     public enum RenderMode { Balls = 0, Ribbon = 1 }
     private RenderMode _mode = RenderMode.Balls;
+    private bool _rainbow = true;
     private ContextMenu _menu = null!;
 
     private readonly List<(int X, int Y)> _snake = new();
@@ -56,7 +57,9 @@ public partial class SnakeGame : UserControl
     public SnakeGame()
     {
         InitializeComponent();
-        _mode = Settings.Load();
+        (_mode, _rainbow) = Settings.Load();
+        Field.UseLayoutRounding = true;
+        Field.SnapsToDevicePixels = true;
         BuildMenu();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -66,26 +69,50 @@ public partial class SnakeGame : UserControl
     private void BuildMenu()
     {
         _menu = new ContextMenu();
+
+        var modeItem = new MenuItem { Header = "Render mode" };
         var m1 = new MenuItem { Header = "Balls (segmented)", Tag = RenderMode.Balls };
         var m2 = new MenuItem { Header = "Ribbon (continuous path)", Tag = RenderMode.Ribbon };
         m1.Click += (_, _) => SwitchMode(RenderMode.Balls);
         m2.Click += (_, _) => SwitchMode(RenderMode.Ribbon);
-        _menu.Items.Add(m1);
-        _menu.Items.Add(m2);
+        modeItem.Items.Add(m1);
+        modeItem.Items.Add(m2);
+
+        var rainbowItem = new MenuItem { Header = "Animated rainbow colors", IsCheckable = true, Tag = "rainbow" };
+        rainbowItem.Click += (_, _) => ToggleRainbow();
+
+        _menu.Items.Add(modeItem);
+        _menu.Items.Add(rainbowItem);
         UpdateMenuChecks();
     }
 
     private void UpdateMenuChecks()
     {
-        ((MenuItem)_menu.Items[0]).IsChecked = _mode == RenderMode.Balls;
-        ((MenuItem)_menu.Items[1]).IsChecked = _mode == RenderMode.Ribbon;
+        ((MenuItem)((MenuItem)_menu.Items[0]).Items[0]).IsChecked = _mode == RenderMode.Balls;
+        ((MenuItem)((MenuItem)_menu.Items[0]).Items[1]).IsChecked = _mode == RenderMode.Ribbon;
+        ((MenuItem)_menu.Items[1]).IsChecked = _rainbow;
+    }
+
+    private void ToggleRainbow()
+    {
+        _rainbow = !_rainbow;
+        Settings.Save(_mode, _rainbow);
+        UpdateMenuChecks();
+        if (!_rainbow) ApplyStaticColors();
+    }
+
+    private void ApplyStaticColors()
+    {
+        UpdateBallsColors(0);
+        if (_mode == RenderMode.Ribbon)
+            DrawRibbonColor(0);
     }
 
     private void SwitchMode(RenderMode m)
     {
         if (m == _mode) return;
         _mode = m;
-        Settings.Save(m);
+        Settings.Save(_mode, _rainbow);
         UpdateMenuChecks();
         Start();
     }
@@ -134,12 +161,16 @@ public partial class SnakeGame : UserControl
             {
                 _lastStepTime = t;
                 StepBalls();
+                if (!_rainbow) UpdateBallsColors(0);
             }
-            UpdateColorsBalls(t);
+            else if (_rainbow)
+            {
+                UpdateBallsColors(t);
+            }
         }
         else
         {
-            UpdateRibbon(t);
+            UpdateRibbon(t, _rainbow);
         }
     }
 
@@ -217,6 +248,7 @@ public partial class SnakeGame : UserControl
                 StrokeEndLineCap = PenLineCap.Round,
                 StrokeLineJoin = PenLineJoin.Round,
                 UseLayoutRounding = true,
+                SnapsToDevicePixels = true,
                 ContextMenu = _menu
             };
             _ribbonStroke = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute };
@@ -367,9 +399,7 @@ public partial class SnakeGame : UserControl
         }
     }
 
-    private void UpdateColorsBalls(double t) => UpdateBallsColors(t);
-
-    private void UpdateRibbon(double t)
+    private void UpdateRibbon(double t, bool rainbow)
     {
         if (!_ribbonReady || _ribbonSamples.Count < 2) return;
         var dt = Math.Max(0.0001, Math.Min(0.05, t - _ribbonLastT));
@@ -391,7 +421,8 @@ public partial class SnakeGame : UserControl
         _ribbonSpeed = 230 + Math.Min(120, lenCells * 4);
 
         TrimRibbonTo(_ribbonTargetLenPx);
-        DrawRibbon(t);
+        DrawRibbonGeometry();
+        if (_rainbow) DrawRibbonColor(t);
     }
 
     private void OnRibbonCellCrossed((int X, int Y) nc)
@@ -471,9 +502,9 @@ public partial class SnakeGame : UserControl
         while (_ribbonSamples.Count > cutIndex + 1) _ribbonSamples.RemoveAt(_ribbonSamples.Count - 1);
     }
 
-    private void DrawRibbon(double t)
+    private void DrawRibbonGeometry()
     {
-        if (_ribbonPath == null || _ribbonStroke == null || _ribbonAlpha == null || _ribbonEffect == null) return;
+        if (_ribbonPath == null || _ribbonStroke == null || _ribbonAlpha == null) return;
         if (_ribbonSamples.Count < 2) return;
 
         var geo = new PathGeometry();
@@ -491,6 +522,11 @@ public partial class SnakeGame : UserControl
         _ribbonStroke.EndPoint = tail;
         _ribbonAlpha.StartPoint = head;
         _ribbonAlpha.EndPoint = tail;
+    }
+
+    private void DrawRibbonColor(double t)
+    {
+        if (_ribbonStroke == null || _ribbonEffect == null) return;
 
         var n = _ribbonStroke.GradientStops.Count;
         for (int i = 0; i < n; i++)
@@ -860,27 +896,31 @@ public partial class SnakeGame : UserControl
         private static string Dir => System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SnakeScreensaver");
         private static string FilePath => System.IO.Path.Combine(Dir, "settings.json");
 
-        public static RenderMode Load()
+        public static (RenderMode Mode, bool Rainbow) Load()
         {
+            RenderMode mode = RenderMode.Balls;
+            bool rainbow = true;
             try
             {
                 if (System.IO.File.Exists(FilePath))
                 {
                     var txt = System.IO.File.ReadAllText(FilePath);
                     var m = Regex.Match(txt, "\"Mode\"\\s*:\\s*(\\d+)");
-                    if (m.Success) return (RenderMode)int.Parse(m.Groups[1].Value);
+                    var r = Regex.Match(txt, "\"Rainbow\"\\s*:\\s*(true|false)");
+                    if (m.Success) mode = (RenderMode)int.Parse(m.Groups[1].Value);
+                    if (r.Success) rainbow = r.Groups[1].Value == "true";
                 }
             }
             catch { }
-            return RenderMode.Balls;
+            return (mode, rainbow);
         }
 
-        public static void Save(RenderMode mode)
+        public static void Save(RenderMode mode, bool rainbow)
         {
             try
             {
                 if (!Directory.Exists(Dir)) Directory.CreateDirectory(Dir);
-                System.IO.File.WriteAllText(FilePath, "{ \"Mode\": " + (int)mode + " }");
+                System.IO.File.WriteAllText(FilePath, "{ \"Mode\": " + (int)mode + ", \"Rainbow\": " + (rainbow ? "true" : "false") + " }");
             }
             catch { }
         }

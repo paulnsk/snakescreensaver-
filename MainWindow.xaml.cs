@@ -1,17 +1,30 @@
 ﻿using System;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Threading;
 
 namespace SnakeScreensaver;
 
 public partial class MainWindow : Window
 {
+    private readonly bool _screensaverMode;
+    private bool _mouseArmed;
+    private Point _mouseAnchor;
+    private const double MouseExitThresholdSq = 9.0;
+
     public MainWindow()
     {
         InitializeComponent();
         Loaded += OnLoaded;
+
+        _screensaverMode = Environment.GetCommandLineArgs()
+            .Skip(1)
+            .Any(a => string.Equals(a, "/s", StringComparison.OrdinalIgnoreCase));
+
+        if (_screensaverMode) EnableScreensaverMode();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -31,12 +44,42 @@ public partial class MainWindow : Window
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape)
+        if (_screensaverMode || e.Key == Key.Escape)
         {
             e.Handled = true;
-            Close();
-            Application.Current.Shutdown();
+            CloseAndShutdown();
         }
+    }
+
+    private void EnableScreensaverMode()
+    {
+        MouseDown += (_, _) => CloseAndShutdown();
+        MouseMove += Screensaver_MouseMove;
+
+        var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle) { Interval = TimeSpan.FromMilliseconds(500) };
+        timer.Tick += (_, _) =>
+        {
+            _mouseAnchor = PointToScreen(Mouse.GetPosition(this));
+            _mouseArmed = true;
+            timer.Stop();
+        };
+        timer.Start();
+    }
+
+    private void Screensaver_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_mouseArmed) return;
+        var sp = PointToScreen(e.GetPosition(this));
+        var dx = sp.X - _mouseAnchor.X;
+        var dy = sp.Y - _mouseAnchor.Y;
+        if (dx * dx + dy * dy > MouseExitThresholdSq)
+            CloseAndShutdown();
+    }
+
+    private void CloseAndShutdown()
+    {
+        Close();
+        Application.Current.Shutdown();
     }
 
     private void HideFromAltTab()
