@@ -31,6 +31,7 @@ public partial class SnakeGame : UserControl
     public enum RenderMode { Balls = 0, Ribbon = 1 }
     private RenderMode _mode = RenderMode.Balls;
     private bool _rainbow = true;
+    private double _hueOffset = 0;
     private ContextMenu _menu = null!;
 
     private readonly List<(int X, int Y)> _snake = new();
@@ -177,6 +178,7 @@ public partial class SnakeGame : UserControl
     private void Start()
     {
         InitFromSize();
+        _hueOffset = _rng.NextDouble() * 360.0;
         _started = true;
         Field.Children.Clear();
         _segs.Clear();
@@ -235,6 +237,7 @@ public partial class SnakeGame : UserControl
         _ribbonHeadCell = (cx, cy);
         _ribbonReady = true;
         _ribbonLastT = Now;
+        DrawRibbonColor(0);
     }
 
     private void EnsureRibbonPath(bool on)
@@ -253,7 +256,7 @@ public partial class SnakeGame : UserControl
             };
             _ribbonStroke = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute };
             for (int i = 0; i < 6; i++)
-                _ribbonStroke.GradientStops.Add(new GradientStop(Colors.White, i / 5.0));
+                _ribbonStroke.GradientStops.Add(new GradientStop(Hsl(_hueOffset + i * 55.0, 1.0, 0.62), i / 5.0));
             _ribbonPath.Stroke = _ribbonStroke;
 
             _ribbonAlpha = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute };
@@ -264,7 +267,7 @@ public partial class SnakeGame : UserControl
 
             _ribbonEffect = new DropShadowEffect
             {
-                Color = Colors.Magenta,
+                Color = Hsl(_hueOffset, 1.0, 0.55),
                 BlurRadius = 30,
                 ShadowDepth = 6,
                 Direction = 320,
@@ -391,7 +394,7 @@ public partial class SnakeGame : UserControl
         for (int i = 0; i < _segs.Count; i++)
         {
             var s = _segs[i];
-            var hue = (t * 55.0 + i * 11.0) % 360.0;
+            var hue = (_hueOffset + t * 55.0 + i * 11.0) % 360.0;
             s.Fill.GradientStops[0].Color = Hsl(hue, 0.85, 0.82);
             s.Fill.GradientStops[1].Color = Hsl(hue, 1.0, 0.5);
             s.Stroke.Color = Hsl((hue + 320) % 360.0, 1.0, 0.6);
@@ -531,10 +534,10 @@ public partial class SnakeGame : UserControl
         var n = _ribbonStroke.GradientStops.Count;
         for (int i = 0; i < n; i++)
         {
-            var hue = (t * 45.0 + i * 55.0) % 360.0;
+            var hue = (_hueOffset + t * 45.0 + i * 55.0) % 360.0;
             _ribbonStroke.GradientStops[i].Color = Hsl(hue, 1.0, 0.62);
         }
-        _ribbonEffect.Color = Hsl((t * 60.0) % 360.0, 1.0, 0.55);
+        _ribbonEffect.Color = Hsl((_hueOffset + t * 60.0) % 360.0, 1.0, 0.55);
     }
 
     private void DieBalls()
@@ -580,6 +583,13 @@ public partial class SnakeGame : UserControl
         _foods.Remove(f);
         var pos = CellCenter(f.Cell);
         TriggerBurst(pos, f.Hue, 28);
+
+        _hueOffset = (_hueOffset + 33.0) % 360.0;
+        if (!_rainbow)
+        {
+            if (_mode == RenderMode.Balls) UpdateBallsColors(0);
+            else if (_ribbonStroke != null) DrawRibbonColor(0);
+        }
 
         if (_mode == RenderMode.Balls)
         {
