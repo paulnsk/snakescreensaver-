@@ -55,11 +55,34 @@ public partial class MainWindow : Window
         Height = SystemParameters.VirtualScreenHeight;
 
         HideFromAltTab();
+        DiagnoseDesktop();
 
         Focus();
         Keyboard.Focus(this);
 
         Game.Focus();
+    }
+
+    private void DiagnoseDesktop()
+    {
+        try
+        {
+            var hDesk = GetThreadDesktop(GetCurrentThreadId());
+            var name = "<err>";
+            var nb = new char[256];
+            if (GetUserObjectInformation(hDesk, UOI_NAME, nb, (uint)nb.Length, out uint w))
+            {
+                int n = 0;
+                while (n < nb.Length && nb[n] != '\0') n++;
+                name = new string(nb, 0, n);
+            }
+            var taskbar = FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Shell_TrayWnd", null);
+            var progman = FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Progman", null);
+            var trayHwnd = taskbar != IntPtr.Zero ? $"0x{taskbar.ToInt64():X}" : "none";
+            var deskHwnd = progman != IntPtr.Zero ? $"0x{progman.ToInt64():X}" : "none";
+            Log($"desktop name='{name}' handle=0x{hDesk.ToInt64():X} taskbar={trayHwnd} progman={deskHwnd}");
+        }
+        catch (Exception ex) { Log($"diag ex: {ex.Message}"); }
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -132,6 +155,21 @@ public partial class MainWindow : Window
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
     private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetThreadDesktop(uint dwThreadId);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetUserObjectInformation(IntPtr hObj, int nIndex, [Out] char[] pvInfo, uint cchInfo, out uint pcchWritten);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string? lpszWindow);
+
+    private const int UOI_NAME = 2;
 
     private static long GetWindowLong(IntPtr hWnd, int nIndex)
     {
