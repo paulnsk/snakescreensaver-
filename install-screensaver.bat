@@ -70,6 +70,16 @@ reg add "HKCU\Control Panel\Desktop" /v ScreenSaveActive /t REG_SZ /d 1 /f >nul
 reg add "HKCU\Control Panel\Desktop" /v ScreenSaveTimeOut /t REG_SZ /d 60 /f >nul
 reg add "HKCU\Control Panel\Desktop" /v ScreenSaverIsSecure /t REG_SZ /d 0 /f >nul
 
+REM ---------- Disable Windows lock-screen so the black backdrop behind our ----------
+REM ---------- transparent screensaver does NOT appear on auto activation.       ----------
+echo [*] Disabling Windows lock-screen (HKLM\...Personalization\NoLockScreen^)...
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Personalization" /v NoLockScreen /t REG_DWORD /d 1 /f >nul
+if errorlevel 1 (
+  echo [!] Could not disable lock-screen (need admin^). Black backdrop may still appear on auto activation.
+) else (
+  echo [*] Lock-screen disabled. Screensaver should now show the live desktop behind it.
+)
+
 REM Refresh system parameters so the new screensaver is picked up immediately.
 rundll32.exe user32.dll,UpdatePerUserSystemParameters ,1 ,True >nul 2>&1
 
@@ -78,6 +88,9 @@ echo.
 echo [+] DONE
 echo     Installed .scr : %TARGET%
 echo     Timeout (sec)  : 60  (one minute; change in Control Panel)
+echo     Lock-screen    : DISABLED (NoLockScreen=1^)
+echo                       Win+L still LOCKS the session, just without the
+echo                       fancy clock+wallpaper lock screen.
 echo     Settings file  : %APPDATA%\SnakeScreensaver\settings.json
 echo     Debug log      : %TEMP%\SnakeScreensaver.log
 echo     Exit on        : mouse move (>=15px^), any click, any key, Esc always
@@ -85,7 +98,6 @@ echo.
 echo     TEST immediately (no waiting for timeout):
 echo       "%TARGET%" /s
 echo.
-echo     Control Panel -> Personalization -> Screen saver should now list
-echo     "SnakeScreensaver" in the dropdown.
+echo     Re-run uninstall-screensaver.bat to restore the lock-screen.
 echo.
 pause
