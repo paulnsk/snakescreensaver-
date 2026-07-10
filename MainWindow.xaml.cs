@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -11,20 +12,39 @@ namespace SnakeScreensaver;
 public partial class MainWindow : Window
 {
     private readonly bool _screensaverMode;
+    private readonly bool _configMode;
     private bool _mouseArmed;
     private Point _mouseAnchor;
-    private const double MouseExitThresholdSq = 9.0;
+    private const double MouseExitThresholdSq = 225.0;
+    private static readonly TimeSpan MouseWarmup = TimeSpan.FromMilliseconds(1500);
 
     public MainWindow()
     {
         InitializeComponent();
         Loaded += OnLoaded;
 
-        _screensaverMode = Environment.GetCommandLineArgs()
-            .Skip(1)
-            .Any(a => string.Equals(a, "/s", StringComparison.OrdinalIgnoreCase));
+        var args = Environment.GetCommandLineArgs();
+        _screensaverMode = args.Length > 1 && MatchArg(args[1], "s");
+        _configMode = args.Length > 1 && (MatchArg(args[1], "c") || MatchArg(args[1], "p"));
+        if (_screensaverMode) Log("launch /s");
 
         if (_screensaverMode) EnableScreensaverMode();
+    }
+
+    private static bool MatchArg(string a, string expected)
+    {
+        var s = a.TrimStart('/', '-').ToLowerInvariant();
+        return s == expected;
+    }
+
+    private static void Log(string msg)
+    {
+        try
+        {
+            var p = Path.Combine(Path.GetTempPath(), "SnakeScreensaver.log");
+            File.AppendAllText(p, $"{DateTime.Now:O} {msg}\r\n");
+        }
+        catch { }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -53,15 +73,19 @@ public partial class MainWindow : Window
 
     private void EnableScreensaverMode()
     {
+        Cursor = Cursors.None;
+
         MouseDown += (_, _) => CloseAndShutdown();
         MouseMove += Screensaver_MouseMove;
 
-        var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle) { Interval = TimeSpan.FromMilliseconds(500) };
+        var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle) { Interval = MouseWarmup };
         timer.Tick += (_, _) =>
         {
-            _mouseAnchor = PointToScreen(Mouse.GetPosition(this));
+            try { _mouseAnchor = PointToScreen(Mouse.GetPosition(this)); }
+            catch { _mouseAnchor = new Point(0, 0); }
             _mouseArmed = true;
             timer.Stop();
+            Log("armed");
         };
         timer.Start();
     }
@@ -73,7 +97,10 @@ public partial class MainWindow : Window
         var dx = sp.X - _mouseAnchor.X;
         var dy = sp.Y - _mouseAnchor.Y;
         if (dx * dx + dy * dy > MouseExitThresholdSq)
+        {
+            Log($"exit mouse move dx={dx:F1} dy={dy:F1}");
             CloseAndShutdown();
+        }
     }
 
     private void CloseAndShutdown()
