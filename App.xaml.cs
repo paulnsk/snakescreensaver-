@@ -1,5 +1,4 @@
-﻿using System.Linq;
-using System.Windows;
+﻿using System.Windows;
 
 namespace SnakeScreensaver;
 
@@ -15,6 +14,11 @@ public partial class App : Application
                 ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 Shutdown(0);
                 return;
+            }
+            if (a == "s")
+            {
+                DesktopHelper.Log("App.OnStartup /s: early desktop switch");
+                DesktopHelper.TrySwitchToDefault();
             }
         }
         base.OnStartup(e);

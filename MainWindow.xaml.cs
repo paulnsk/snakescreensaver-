@@ -1,6 +1,4 @@
 ﻿using System;
-using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
@@ -12,7 +10,6 @@ namespace SnakeScreensaver;
 public partial class MainWindow : Window
 {
     private readonly bool _screensaverMode;
-    private readonly bool _configMode;
     private bool _mouseArmed;
     private Point _mouseAnchor;
     private const double MouseExitThresholdSq = 225.0;
@@ -25,10 +22,11 @@ public partial class MainWindow : Window
 
         var args = Environment.GetCommandLineArgs();
         _screensaverMode = args.Length > 1 && MatchArg(args[1], "s");
-        _configMode = args.Length > 1 && (MatchArg(args[1], "c") || MatchArg(args[1], "p"));
-        if (_screensaverMode) Log("launch /s");
-
-        if (_screensaverMode) EnableScreensaverMode();
+        if (_screensaverMode)
+        {
+            DesktopHelper.Log("launch /s (MainWindow ctor)");
+            EnableScreensaverMode();
+        }
     }
 
     private static bool MatchArg(string a, string expected)
@@ -37,20 +35,8 @@ public partial class MainWindow : Window
         return s == expected;
     }
 
-    private static void Log(string msg)
-    {
-        try
-        {
-            var p = Path.Combine(Path.GetTempPath(), "SnakeScreensaver.log");
-            File.AppendAllText(p, $"{DateTime.Now:O} {msg}\r\n");
-        }
-        catch { }
-    }
-
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_screensaverMode) SwitchToDefaultDesktop();
-
         Left = SystemParameters.VirtualScreenLeft;
         Top = SystemParameters.VirtualScreenTop;
         Width = SystemParameters.VirtualScreenWidth;
@@ -65,57 +51,18 @@ public partial class MainWindow : Window
         Game.Focus();
     }
 
-    private void SwitchToDefaultDesktop()
-    {
-        try
-        {
-            var hCur = GetThreadDesktop(GetCurrentThreadId());
-            var nb = new char[256];
-            string cur = "<err>";
-            if (GetUserObjectInformation(hCur, UOI_NAME, nb, (uint)nb.Length, out uint w))
-            {
-                int n = 0; while (n < nb.Length && nb[n] != '\0') n++;
-                cur = new string(nb, 0, n);
-            }
-            Log($"pre-switch desktop='{cur}'");
-
-            if (cur == "Default") { Log("already Default, no switch needed"); return; }
-
-            var access = DESKTOP_CREATEWINDOW | DESKTOP_CREATEMENU | DESKTOP_ENUMERATE
-                       | DESKTOP_WRITEOBJECTS | DESKTOP_READOBJECTS
-                       | STANDARD_RIGHTS_REQUIRED;
-            var hDef = OpenDesktopW("Default", 0, false, access);
-            if (hDef == IntPtr.Zero) { Log($"OpenDesktop failed WinError={Marshal.GetLastWin32Error()}"); return; }
-            try
-            {
-                if (SetThreadDesktop(hDef)) Log("SetThreadDesktop(Default) OK");
-                else Log($"SetThreadDesktop failed WinError={Marshal.GetLastWin32Error()}");
-            }
-            finally { CloseDesktop(hDef); }
-        }
-        catch (Exception ex) { Log($"switch ex: {ex.Message}"); }
-    }
-
     private void DiagnoseDesktop()
     {
         try
         {
-            var hDesk = GetThreadDesktop(GetCurrentThreadId());
-            var name = "<err>";
-            var nb = new char[256];
-            if (GetUserObjectInformation(hDesk, UOI_NAME, nb, (uint)nb.Length, out uint w))
-            {
-                int n = 0;
-                while (n < nb.Length && nb[n] != '\0') n++;
-                name = new string(nb, 0, n);
-            }
+            var sn = DesktopHelper.CurrentName();
             var taskbar = FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Shell_TrayWnd", null);
             var progman = FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Progman", null);
-            var trayHwnd = taskbar != IntPtr.Zero ? $"0x{taskbar.ToInt64():X}" : "none";
-            var deskHwnd = progman != IntPtr.Zero ? $"0x{progman.ToInt64():X}" : "none";
-            Log($"desktop name='{name}' handle=0x{hDesk.ToInt64():X} taskbar={trayHwnd} progman={deskHwnd}");
+            var taskbarStr = taskbar != IntPtr.Zero ? $"0x{taskbar.ToInt64():X}" : "none";
+            var progmanStr = progman != IntPtr.Zero ? $"0x{progman.ToInt64():X}" : "none";
+            DesktopHelper.Log($"post-load desktop name='{sn}' taskbar={taskbarStr} progman={progmanStr}");
         }
-        catch (Exception ex) { Log($"diag ex: {ex.Message}"); }
+        catch (Exception ex) { DesktopHelper.Log($"diag ex: {ex.Message}"); }
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -141,7 +88,7 @@ public partial class MainWindow : Window
             catch { _mouseAnchor = new Point(0, 0); }
             _mouseArmed = true;
             timer.Stop();
-            Log("armed");
+            DesktopHelper.Log("armed");
         };
         timer.Start();
     }
@@ -154,7 +101,7 @@ public partial class MainWindow : Window
         var dy = sp.Y - _mouseAnchor.Y;
         if (dx * dx + dy * dy > MouseExitThresholdSq)
         {
-            Log($"exit mouse move dx={dx:F1} dy={dy:F1}");
+            DesktopHelper.Log($"exit mouse move dx={dx:F1} dy={dy:F1}");
             CloseAndShutdown();
         }
     }
@@ -189,38 +136,8 @@ public partial class MainWindow : Window
     [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
     private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
 
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetThreadDesktop(uint dwThreadId);
-
-    [DllImport("kernel32.dll")]
-    private static extern uint GetCurrentThreadId();
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetUserObjectInformation(IntPtr hObj, int nIndex, [Out] char[] pvInfo, uint cchInfo, out uint pcchWritten);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string? lpszWindow);
-
-    private const int UOI_NAME = 2;
-
-    private const int DESKTOP_CREATEWINDOW = 0x0002;
-    private const int DESKTOP_CREATEMENU = 0x0004;
-    private const int DESKTOP_ENUMERATE = 0x0040;
-    private const int DESKTOP_WRITEOBJECTS = 0x0080;
-    private const int DESKTOP_READOBJECTS = 0x0001;
-    private const int STANDARD_RIGHTS_REQUIRED = 0x000F0000;
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern IntPtr OpenDesktopW(string lpszDesktop, int dwFlags, bool fInherit, int dwDesiredAccess);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetThreadDesktop(IntPtr hDesktop);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseDesktop(IntPtr hDesktop);
 
     private static long GetWindowLong(IntPtr hWnd, int nIndex)
     {
