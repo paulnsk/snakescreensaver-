@@ -49,6 +49,8 @@ public partial class MainWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        if (_screensaverMode) SwitchToDefaultDesktop();
+
         Left = SystemParameters.VirtualScreenLeft;
         Top = SystemParameters.VirtualScreenTop;
         Width = SystemParameters.VirtualScreenWidth;
@@ -61,6 +63,37 @@ public partial class MainWindow : Window
         Keyboard.Focus(this);
 
         Game.Focus();
+    }
+
+    private void SwitchToDefaultDesktop()
+    {
+        try
+        {
+            var hCur = GetThreadDesktop(GetCurrentThreadId());
+            var nb = new char[256];
+            string cur = "<err>";
+            if (GetUserObjectInformation(hCur, UOI_NAME, nb, (uint)nb.Length, out uint w))
+            {
+                int n = 0; while (n < nb.Length && nb[n] != '\0') n++;
+                cur = new string(nb, 0, n);
+            }
+            Log($"pre-switch desktop='{cur}'");
+
+            if (cur == "Default") { Log("already Default, no switch needed"); return; }
+
+            var access = DESKTOP_CREATEWINDOW | DESKTOP_CREATEMENU | DESKTOP_ENUMERATE
+                       | DESKTOP_WRITEOBJECTS | DESKTOP_READOBJECTS
+                       | STANDARD_RIGHTS_REQUIRED;
+            var hDef = OpenDesktopW("Default", 0, false, access);
+            if (hDef == IntPtr.Zero) { Log($"OpenDesktop failed WinError={Marshal.GetLastWin32Error()}"); return; }
+            try
+            {
+                if (SetThreadDesktop(hDef)) Log("SetThreadDesktop(Default) OK");
+                else Log($"SetThreadDesktop failed WinError={Marshal.GetLastWin32Error()}");
+            }
+            finally { CloseDesktop(hDef); }
+        }
+        catch (Exception ex) { Log($"switch ex: {ex.Message}"); }
     }
 
     private void DiagnoseDesktop()
@@ -170,6 +203,24 @@ public partial class MainWindow : Window
     private static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string? lpszWindow);
 
     private const int UOI_NAME = 2;
+
+    private const int DESKTOP_CREATEWINDOW = 0x0002;
+    private const int DESKTOP_CREATEMENU = 0x0004;
+    private const int DESKTOP_ENUMERATE = 0x0040;
+    private const int DESKTOP_WRITEOBJECTS = 0x0080;
+    private const int DESKTOP_READOBJECTS = 0x0001;
+    private const int STANDARD_RIGHTS_REQUIRED = 0x000F0000;
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr OpenDesktopW(string lpszDesktop, int dwFlags, bool fInherit, int dwDesiredAccess);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetThreadDesktop(IntPtr hDesktop);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseDesktop(IntPtr hDesktop);
 
     private static long GetWindowLong(IntPtr hWnd, int nIndex)
     {
