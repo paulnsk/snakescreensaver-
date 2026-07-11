@@ -1,13 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using Path = System.Windows.Shapes.Path;
@@ -28,11 +25,9 @@ public partial class SnakeGame : UserControl
     private double _deadAt;
     private double Now => _sw.Elapsed.TotalSeconds;
 
-    public enum RenderMode { Balls = 0, Ribbon = 1 }
-    private RenderMode _mode = RenderMode.Balls;
+    private Settings.RenderMode _mode = Settings.RenderMode.Balls;
     private bool _rainbow = true;
     private double _hueOffset = 0;
-    private ContextMenu _menu = null!;
 
     private readonly List<(int X, int Y)> _snake = new();
     private readonly List<Seg> _segs = new();
@@ -58,64 +53,13 @@ public partial class SnakeGame : UserControl
     public SnakeGame()
     {
         InitializeComponent();
-        (_mode, _rainbow) = Settings.Load();
+        _mode = Settings.Mode;
+        _rainbow = Settings.Rainbow;
         Field.UseLayoutRounding = true;
         Field.SnapsToDevicePixels = true;
-        BuildMenu();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         SizeChanged += (_, _) => InitFromSize(true);
-    }
-
-    private void BuildMenu()
-    {
-        _menu = new ContextMenu();
-
-        var modeItem = new MenuItem { Header = "Render mode" };
-        var m1 = new MenuItem { Header = "Balls (segmented)", Tag = RenderMode.Balls };
-        var m2 = new MenuItem { Header = "Ribbon (continuous path)", Tag = RenderMode.Ribbon };
-        m1.Click += (_, _) => SwitchMode(RenderMode.Balls);
-        m2.Click += (_, _) => SwitchMode(RenderMode.Ribbon);
-        modeItem.Items.Add(m1);
-        modeItem.Items.Add(m2);
-
-        var rainbowItem = new MenuItem { Header = "Animated rainbow colors", IsCheckable = true, Tag = "rainbow" };
-        rainbowItem.Click += (_, _) => ToggleRainbow();
-
-        _menu.Items.Add(modeItem);
-        _menu.Items.Add(rainbowItem);
-        UpdateMenuChecks();
-    }
-
-    private void UpdateMenuChecks()
-    {
-        ((MenuItem)((MenuItem)_menu.Items[0]).Items[0]).IsChecked = _mode == RenderMode.Balls;
-        ((MenuItem)((MenuItem)_menu.Items[0]).Items[1]).IsChecked = _mode == RenderMode.Ribbon;
-        ((MenuItem)_menu.Items[1]).IsChecked = _rainbow;
-    }
-
-    private void ToggleRainbow()
-    {
-        _rainbow = !_rainbow;
-        Settings.Save(_mode, _rainbow);
-        UpdateMenuChecks();
-        if (!_rainbow) ApplyStaticColors();
-    }
-
-    private void ApplyStaticColors()
-    {
-        UpdateBallsColors(0);
-        if (_mode == RenderMode.Ribbon)
-            DrawRibbonColor(0);
-    }
-
-    private void SwitchMode(RenderMode m)
-    {
-        if (m == _mode) return;
-        _mode = m;
-        Settings.Save(_mode, _rainbow);
-        UpdateMenuChecks();
-        Start();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -156,7 +100,7 @@ public partial class SnakeGame : UserControl
             return;
         }
         if (_cols == 0) return;
-        if (_mode == RenderMode.Balls)
+        if (_mode == Settings.RenderMode.Balls)
         {
             if (t - _lastStepTime >= _intervalSec)
             {
@@ -189,7 +133,7 @@ public partial class SnakeGame : UserControl
         _ribbonSamples.Clear();
         _ribbonReady = false;
 
-        if (_mode == RenderMode.Balls) StartBalls();
+        if (_mode == Settings.RenderMode.Balls) StartBalls();
         else StartRibbon();
 
         for (int i = 0; i < 5; i++) SpawnFood();
@@ -251,8 +195,7 @@ public partial class SnakeGame : UserControl
                 StrokeEndLineCap = PenLineCap.Round,
                 StrokeLineJoin = PenLineJoin.Round,
                 UseLayoutRounding = true,
-                SnapsToDevicePixels = true,
-                ContextMenu = _menu
+                SnapsToDevicePixels = true
             };
             _ribbonStroke = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute };
             for (int i = 0; i < 6; i++)
@@ -425,7 +368,7 @@ public partial class SnakeGame : UserControl
 
         TrimRibbonTo(_ribbonTargetLenPx);
         DrawRibbonGeometry();
-        if (_rainbow) DrawRibbonColor(t);
+        if (rainbow) DrawRibbonColor(t);
     }
 
     private void OnRibbonCellCrossed((int X, int Y) nc)
@@ -550,10 +493,10 @@ public partial class SnakeGame : UserControl
             var seg = _segs[i];
             var hue = (Now * 55.0 + i * 11.0) % 360.0;
             TriggerBurst(seg.Stored, hue, 18);
-            var fade = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.55))
+            var fade = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.55))
             {
                 BeginTime = TimeSpan.FromSeconds(i * 0.012),
-                EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut }
+                EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
             };
             seg.Ell.BeginAnimation(OpacityProperty, fade);
         }
@@ -571,8 +514,8 @@ public partial class SnakeGame : UserControl
         }
         if (_ribbonPath != null)
         {
-            var fade = new DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.6))
-            { EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut } };
+            var fade = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.6))
+            { EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
             _ribbonPath.BeginAnimation(OpacityProperty, fade);
         }
     }
@@ -587,21 +530,21 @@ public partial class SnakeGame : UserControl
         _hueOffset = (_hueOffset + 33.0) % 360.0;
         if (!_rainbow)
         {
-            if (_mode == RenderMode.Balls) UpdateBallsColors(0);
+            if (_mode == Settings.RenderMode.Balls) UpdateBallsColors(0);
             else if (_ribbonStroke != null) DrawRibbonColor(0);
         }
 
-        if (_mode == RenderMode.Balls)
+        if (_mode == Settings.RenderMode.Balls)
         {
             var head = _segs.FirstOrDefault();
             if (head != null)
             {
                 var scale = new ScaleTransform(1, 1) { CenterX = head.Half, CenterY = head.Half };
                 head.Ell.RenderTransform = scale;
-                var pop = new DoubleAnimation(1.0, 1.45, TimeSpan.FromSeconds(0.22))
+                var pop = new System.Windows.Media.Animation.DoubleAnimation(1.0, 1.45, TimeSpan.FromSeconds(0.22))
                 {
                     AutoReverse = true,
-                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut }
+                    EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
                 };
                 scale.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
                 scale.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
@@ -632,12 +575,12 @@ public partial class SnakeGame : UserControl
             var dx = Math.Cos(ang) * spd;
             var dy = Math.Sin(ang) * spd;
             var dur = TimeSpan.FromSeconds(_rng.NextDouble() * 0.45 + 0.55);
-            var ax = new DoubleAnimation(center.X + offX, center.X + offX + dx, dur)
-            { EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut } };
-            var ay = new DoubleAnimation(center.Y + offY, center.Y + offY + dy, dur)
-            { EasingFunction = new SineEase { EasingMode = EasingMode.EaseOut } };
-            var ao = new DoubleAnimation(1, 0, dur) { EasingFunction = new SineEase { EasingMode = EasingMode.EaseIn } };
-            var grow = new DoubleAnimation(1, 0.2, dur);
+            var ax = new System.Windows.Media.Animation.DoubleAnimation(center.X + offX, center.X + offX + dx, dur)
+            { EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+            var ay = new System.Windows.Media.Animation.DoubleAnimation(center.Y + offY, center.Y + offY + dy, dur)
+            { EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+            var ao = new System.Windows.Media.Animation.DoubleAnimation(1, 0, dur) { EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
+            var grow = new System.Windows.Media.Animation.DoubleAnimation(1, 0.2, dur);
 
             var ell = p;
             ax.Completed += (_, _) => Field.Children.Remove(ell);
@@ -658,8 +601,7 @@ public partial class SnakeGame : UserControl
             Width = Cell * 0.92,
             Height = Cell * 0.92,
             StrokeThickness = 2,
-            RenderTransformOrigin = new Point(0.5, 0.5),
-            ContextMenu = _menu
+            RenderTransformOrigin = new Point(0.5, 0.5)
         };
         var fill = new RadialGradientBrush
         {
@@ -696,7 +638,7 @@ public partial class SnakeGame : UserControl
 
     private void SpawnFood()
     {
-        IEnumerable<(int, int)> baseOcc = _mode == RenderMode.Ribbon
+        IEnumerable<(int, int)> baseOcc = _mode == Settings.RenderMode.Ribbon
             ? BodyCellsFromTail()
             : _snake.Select(c => (c.X, c.Y));
         var occupied = new HashSet<(int, int)>(baseOcc);
@@ -755,7 +697,6 @@ public partial class SnakeGame : UserControl
         sh.Stroke = new SolidColorBrush(Hsl((hue + 320) % 360.0, 1.0, 0.7));
         sh.StrokeThickness = 1.8;
         sh.UseLayoutRounding = true;
-        sh.ContextMenu = _menu;
 
         var dse = new DropShadowEffect
         {
@@ -781,14 +722,14 @@ public partial class SnakeGame : UserControl
         sh.RenderTransform = group;
 
         rot.BeginAnimation(RotateTransform.AngleProperty,
-            new DoubleAnimation(0, 360, TimeSpan.FromSeconds(_rng.NextDouble() * 4 + 3))
-            { RepeatBehavior = RepeatBehavior.Forever });
+            new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(_rng.NextDouble() * 4 + 3))
+            { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever });
 
         var pulseDur = TimeSpan.FromSeconds(_rng.NextDouble() * 0.4 + 0.5);
-        var sx = new DoubleAnimation(1.0, 1.2, pulseDur)
-        { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } };
-        var sy = new DoubleAnimation(1.0, 1.2, pulseDur)
-        { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut } };
+        var sx = new System.Windows.Media.Animation.DoubleAnimation(1.0, 1.2, pulseDur)
+        { AutoReverse = true, RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever, EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut } };
+        var sy = new System.Windows.Media.Animation.DoubleAnimation(1.0, 1.2, pulseDur)
+        { AutoReverse = true, RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever, EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut } };
         scale.BeginAnimation(ScaleTransform.ScaleXProperty, sx);
         scale.BeginAnimation(ScaleTransform.ScaleYProperty, sy);
 
@@ -885,8 +826,8 @@ public partial class SnakeGame : UserControl
 
         public void AnimateTo(Point center, TimeSpan dur)
         {
-            var ax = new DoubleAnimation(Stored.X - Half, center.X - Half, dur);
-            var ay = new DoubleAnimation(Stored.Y - Half, center.Y - Half, dur);
+            var ax = new System.Windows.Media.Animation.DoubleAnimation(Stored.X - Half, center.X - Half, dur);
+            var ay = new System.Windows.Media.Animation.DoubleAnimation(Stored.Y - Half, center.Y - Half, dur);
             Ell.BeginAnimation(Canvas.LeftProperty, ax);
             Ell.BeginAnimation(Canvas.TopProperty, ay);
             Stored = center;
@@ -899,40 +840,5 @@ public partial class SnakeGame : UserControl
         public double Hue;
         public Shape Shape = null!;
         public int Growth;
-    }
-
-    internal static class Settings
-    {
-        private static string Dir => System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SnakeScreensaver");
-        private static string FilePath => System.IO.Path.Combine(Dir, "settings.json");
-
-        public static (RenderMode Mode, bool Rainbow) Load()
-        {
-            RenderMode mode = RenderMode.Balls;
-            bool rainbow = true;
-            try
-            {
-                if (System.IO.File.Exists(FilePath))
-                {
-                    var txt = System.IO.File.ReadAllText(FilePath);
-                    var m = Regex.Match(txt, "\"Mode\"\\s*:\\s*(\\d+)");
-                    var r = Regex.Match(txt, "\"Rainbow\"\\s*:\\s*(true|false)");
-                    if (m.Success) mode = (RenderMode)int.Parse(m.Groups[1].Value);
-                    if (r.Success) rainbow = r.Groups[1].Value == "true";
-                }
-            }
-            catch { }
-            return (mode, rainbow);
-        }
-
-        public static void Save(RenderMode mode, bool rainbow)
-        {
-            try
-            {
-                if (!Directory.Exists(Dir)) Directory.CreateDirectory(Dir);
-                System.IO.File.WriteAllText(FilePath, "{ \"Mode\": " + (int)mode + ", \"Rainbow\": " + (rainbow ? "true" : "false") + " }");
-            }
-            catch { }
-        }
     }
 }

@@ -9,30 +9,16 @@ namespace SnakeScreensaver;
 
 public partial class MainWindow : Window
 {
-    private readonly bool _screensaverMode;
     private bool _mouseArmed;
     private Point _mouseAnchor;
-    private const double MouseExitThresholdSq = 225.0;
+    private const double MouseExitThresholdSq = 256.0;
     private static readonly TimeSpan MouseWarmup = TimeSpan.FromMilliseconds(1500);
 
     public MainWindow()
     {
         InitializeComponent();
         Loaded += OnLoaded;
-
-        var args = Environment.GetCommandLineArgs();
-        _screensaverMode = args.Length > 1 && MatchArg(args[1], "s");
-        if (_screensaverMode)
-        {
-            DesktopHelper.Log("launch /s (MainWindow ctor)");
-            EnableScreensaverMode();
-        }
-    }
-
-    private static bool MatchArg(string a, string expected)
-    {
-        var s = a.TrimStart('/', '-').ToLowerInvariant();
-        return s == expected;
+        Cursor = Settings.Exit == Settings.ExitMode.MouseMove ? Cursors.None : Cursors.Arrow;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -43,73 +29,45 @@ public partial class MainWindow : Window
         Height = SystemParameters.VirtualScreenHeight;
 
         HideFromAltTab();
-        DiagnoseDesktop();
 
         Focus();
         Keyboard.Focus(this);
 
         Game.Focus();
-    }
 
-    private void DiagnoseDesktop()
-    {
-        try
+        if (Settings.Exit == Settings.ExitMode.MouseMove)
         {
-            var sn = DesktopHelper.CurrentName();
-            var taskbar = FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Shell_TrayWnd", null);
-            var progman = FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Progman", null);
-            var taskbarStr = taskbar != IntPtr.Zero ? $"0x{taskbar.ToInt64():X}" : "none";
-            var progmanStr = progman != IntPtr.Zero ? $"0x{progman.ToInt64():X}" : "none";
-            DesktopHelper.Log($"post-load desktop name='{sn}' taskbar={taskbarStr} progman={progmanStr}");
-        }
-        catch (Exception ex) { DesktopHelper.Log($"diag ex: {ex.Message}"); }
-    }
-
-    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (_screensaverMode || e.Key == Key.Escape)
-        {
-            e.Handled = true;
-            CloseAndShutdown();
+            MouseMove += MainWindow_MouseMove;
+            MouseDown += (_, _) => Close();
+            var t = new DispatcherTimer(DispatcherPriority.ApplicationIdle) { Interval = MouseWarmup };
+            t.Tick += (_, _) =>
+            {
+                try { _mouseAnchor = PointToScreen(Mouse.GetPosition(this)); }
+                catch { _mouseAnchor = new Point(0, 0); }
+                _mouseArmed = true;
+                t.Stop();
+            };
+            t.Start();
         }
     }
 
-    private void EnableScreensaverMode()
-    {
-        Cursor = Cursors.None;
-
-        MouseDown += (_, _) => CloseAndShutdown();
-        MouseMove += Screensaver_MouseMove;
-
-        var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle) { Interval = MouseWarmup };
-        timer.Tick += (_, _) =>
-        {
-            try { _mouseAnchor = PointToScreen(Mouse.GetPosition(this)); }
-            catch { _mouseAnchor = new Point(0, 0); }
-            _mouseArmed = true;
-            timer.Stop();
-            DesktopHelper.Log("armed");
-        };
-        timer.Start();
-    }
-
-    private void Screensaver_MouseMove(object sender, MouseEventArgs e)
+    private void MainWindow_MouseMove(object sender, MouseEventArgs e)
     {
         if (!_mouseArmed) return;
         var sp = PointToScreen(e.GetPosition(this));
         var dx = sp.X - _mouseAnchor.X;
         var dy = sp.Y - _mouseAnchor.Y;
         if (dx * dx + dy * dy > MouseExitThresholdSq)
-        {
-            DesktopHelper.Log($"exit mouse move dx={dx:F1} dy={dy:F1}");
-            CloseAndShutdown();
-        }
+            Close();
     }
 
-    private void CloseAndShutdown()
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        Close();
-        Application.Current.Shutdown();
+        if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            Close();
+        }
     }
 
     private void HideFromAltTab()
@@ -135,9 +93,6 @@ public partial class MainWindow : Window
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
     private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string? lpszWindow);
 
     private static long GetWindowLong(IntPtr hWnd, int nIndex)
     {
