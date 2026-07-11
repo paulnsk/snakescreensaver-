@@ -53,17 +53,34 @@ public sealed class TrayHost : IDisposable
         _menu.Activate();
     }
 
+    private static System.Windows.Size MeasureWindow(TrayMenuWindow m)
+    {
+        m.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+        m.Arrange(new Rect(new System.Windows.Point(-99999, -99999), m.DesiredSize));
+        var sz = new System.Windows.Size(m.ActualWidth, m.ActualHeight);
+        if (sz.Width <= 0 || sz.Height <= 0) sz = m.DesiredSize;
+        if (sz.Width <= 0) sz = new System.Windows.Size(360, sz.Height);
+        if (sz.Height <= 0) sz = new System.Windows.Size(sz.Width, 480);
+        return sz;
+    }
+
     private static System.Windows.Point ComputeMenuLocation(TrayMenuWindow m)
     {
         var cursor = System.Windows.Forms.Cursor.Position;
-        var size = m.RenderSize;
-        double sx = cursor.X - size.Width;
-        double sy = cursor.Y - (size.Height + 8);
+        var size = MeasureWindow(m);
         var wa = SystemParameters.WorkArea;
+
+        double sx = cursor.X - size.Width - 6;
+        double sy = cursor.Y - size.Height - 6;
+
+        if (sy < wa.Top + 4) sy = cursor.Y + 4;
+        if (sx < wa.Left + 4) sx = cursor.X + 8;
+
         if (sx < wa.Left + 4) sx = wa.Left + 4;
         if (sy < wa.Top + 4) sy = wa.Top + 4;
         if (sx + size.Width > wa.Right - 4) sx = wa.Right - size.Width - 4;
         if (sy + size.Height > wa.Bottom - 4) sy = wa.Bottom - size.Height - 4;
+
         return new System.Windows.Point(sx, sy);
     }
 
