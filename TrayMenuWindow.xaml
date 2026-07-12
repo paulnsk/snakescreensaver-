@@ -53,7 +53,7 @@
                 </StackPanel>
             </Button>
 
-            <Expander x:Name="RenderExp" Header="RENDER MODE  🎨" Style="{StaticResource TrayExpander}">
+            <Expander  x:Name="RenderExp" Header="RENDER MODE  🎨" Style="{StaticResource TrayExpander}">
                 <StackPanel Margin="14,4">
                     <RadioButton x:Name="RenderBalls" Content="⚽ Balls (segmented)" GroupName="rm"
                                  Style="{StaticResource TrayRadio}" Checked="Render_Checked"/>

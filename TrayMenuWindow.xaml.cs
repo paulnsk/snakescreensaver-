@@ -2,12 +2,15 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 
 namespace SnakeScreensaver;
 
 public partial class TrayMenuWindow : Window
 {
     private readonly TrayHost _host;
+    private double _anchorRight;
+    private double _anchorBottom;
 
     public TrayMenuWindow(TrayHost host)
     {
@@ -16,6 +19,13 @@ public partial class TrayMenuWindow : Window
         BuildIdleOptions();
         SyncRadios();
         Loaded += TrayMenuWindow_Loaded;
+
+        RenderExp.Expanded += Expander_StateChanged;
+        RenderExp.Collapsed += Expander_StateChanged;
+        ExitExp.Expanded += Expander_StateChanged;
+        ExitExp.Collapsed += Expander_StateChanged;
+        IdleExp.Expanded += Expander_StateChanged;
+        IdleExp.Collapsed += Expander_StateChanged;
     }
 
     private void TrayMenuWindow_Loaded(object sender, RoutedEventArgs e)
@@ -99,12 +109,16 @@ public partial class TrayMenuWindow : Window
 
     private void Settings_Click(object sender, RoutedEventArgs e)
     {
-        Close();
+        Log.Line("TrayMenu.Settings_Click");
+        Deactivated -= Window_Deactivated;
         _host.OpenSettings();
+        Close();
     }
 
     private void Quit_Click(object sender, RoutedEventArgs e)
     {
+        Log.Line("TrayMenu.Quit_Click");
+        Deactivated -= Window_Deactivated;
         _host.Quit();
     }
 
@@ -113,8 +127,55 @@ public partial class TrayMenuWindow : Window
         DragMove();
     }
 
-    private void Window_Deactivated(object sender, System.EventArgs e)
+    private void Window_Deactivated(object? sender, System.EventArgs e)
     {
+        Log.Line("TrayMenu.Window_Deactivated → Close");
         Close();
+    }
+
+    internal void InitAnchor(double right, double bottom, System.Windows.Size size)
+    {
+        _anchorRight = right;
+        _anchorBottom = bottom;
+        Log.Line($"InitAnchor: right={right} bottom={bottom} size={size.Width}x{size.Height}");
+    }
+
+    internal System.Windows.Point ComputeRestLocation()
+    {
+        var wa = SystemParameters.WorkArea;
+        var w = ActualWidth > 0 ? ActualWidth : (RenderSize.Width > 0 ? RenderSize.Width : 360);
+        var h = ActualHeight > 0 ? ActualHeight : (RenderSize.Height > 0 ? RenderSize.Height : 480);
+        double left = _anchorRight - w;
+        double top = _anchorBottom - h;
+        if (top < wa.Top + 4) top = wa.Top + 4;
+        if (left < wa.Left + 4) left = wa.Left + 4;
+        return new System.Windows.Point(left, top);
+    }
+
+    private void Expander_StateChanged(object sender, RoutedEventArgs e)
+    {
+        var exp = sender as Expander;
+        Log.Line($"Expander_StateChanged: {exp?.Name} IsExpanded={exp?.IsExpanded} anchors=({_anchorRight},{_anchorBottom})");
+        Dispatcher.BeginInvoke(new Action(Reposition), DispatcherPriority.Background);
+    }
+
+    private void Reposition()
+    {
+        try
+        {
+            if (_anchorRight <= 0 || _anchorBottom <= 0)
+            {
+                Log.Line("Reposition: skipped (no anchors yet)");
+                return;
+            }
+            var loc = ComputeRestLocation();
+            Left = loc.X;
+            Top = loc.Y;
+            Log.Line($"Reposition: ({Left},{Top}) size {ActualWidth}x{ActualHeight} anchors=({_anchorRight},{_anchorBottom})");
+        }
+        catch (Exception ex)
+        {
+            Log.Exc("Reposition threw", ex);
+        }
     }
 }

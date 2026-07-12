@@ -106,7 +106,7 @@ public partial class SnakeGame : UserControl
             {
                 _lastStepTime = t;
                 StepBalls();
-                if (!_rainbow) UpdateBallsColors(0);
+                if (_rainbow) UpdateBallsColors(t);
             }
             else if (_rainbow)
             {
@@ -135,6 +135,8 @@ public partial class SnakeGame : UserControl
 
         if (_mode == Settings.RenderMode.Balls) StartBalls();
         else StartRibbon();
+
+        if (_mode == Settings.RenderMode.Balls) UpdateBallsColors(0);
 
         for (int i = 0; i < 5; i++) SpawnFood();
 
@@ -618,7 +620,7 @@ public partial class SnakeGame : UserControl
         var dse = new DropShadowEffect
         {
             Color = Colors.Magenta,
-            BlurRadius = 26,
+            BlurRadius = 16,
             ShadowDepth = 8,
             Direction = 320,
             Opacity = 0.95,
@@ -701,7 +703,7 @@ public partial class SnakeGame : UserControl
         var dse = new DropShadowEffect
         {
             Color = Hsl(hue, 1.0, 0.55),
-            BlurRadius = 28,
+            BlurRadius = 18,
             ShadowDepth = 4,
             Direction = 315,
             Opacity = 0.95,

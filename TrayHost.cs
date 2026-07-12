@@ -18,6 +18,7 @@ public sealed class TrayHost : IDisposable
 
     public void Start()
     {
+        Log.Line($"TrayHost.Start on thread {Thread.CurrentThread.ManagedThreadId}");
         _icon = new NotifyIcon
         {
             Icon = BuildIcon(),
@@ -43,14 +44,33 @@ public sealed class TrayHost : IDisposable
 
     private void ShowMenu()
     {
-        if (_menu != null && _menu.IsVisible) { _menu.Activate(); return; }
+        Log.Line("ShowMenu: enter");
+        if (_menu != null && _menu.IsVisible) { _menu.Activate(); Log.Line("ShowMenu: reused existing"); return; }
         _menu = new TrayMenuWindow(this);
-        _menu.Deactivated += (_, _) => _menu.Hide();
-        var loc = ComputeMenuLocation(_menu);
+        _menu.Deactivated += (_, _) =>
+        {
+            try { _menu.Hide(); }
+            catch (Exception ex) { Log.Exc("ShowMenu.Deactivated.Hide", ex); }
+        };
+
+        var size = MeasureWindow(_menu);
+        var wa = SystemParameters.WorkArea;
+        var cursor = System.Windows.Forms.Cursor.Position;
+
+        double right = Math.Min(cursor.X + 8, wa.Right - 2);
+        double bottom = wa.Bottom;
+
+        _menu.InitAnchor(right, bottom, size);
+
+        _menu.Left = -10000;
+        _menu.Top = -10000;
+        _menu.Show();
+
+        var loc = _menu.ComputeRestLocation();
         _menu.Left = loc.X;
         _menu.Top = loc.Y;
-        _menu.Show();
         _menu.Activate();
+        Log.Line($"ShowMenu: opened at ({loc.X}, {loc.Y}) size {size.Width}x{size.Height} anchor right={right} bottom={bottom} workArea={wa}");
     }
 
     private static System.Windows.Size MeasureWindow(TrayMenuWindow m)
@@ -62,26 +82,6 @@ public sealed class TrayHost : IDisposable
         if (sz.Width <= 0) sz = new System.Windows.Size(360, sz.Height);
         if (sz.Height <= 0) sz = new System.Windows.Size(sz.Width, 480);
         return sz;
-    }
-
-    private static System.Windows.Point ComputeMenuLocation(TrayMenuWindow m)
-    {
-        var cursor = System.Windows.Forms.Cursor.Position;
-        var size = MeasureWindow(m);
-        var wa = SystemParameters.WorkArea;
-
-        double sx = cursor.X - size.Width - 6;
-        double sy = cursor.Y - size.Height - 6;
-
-        if (sy < wa.Top + 4) sy = cursor.Y + 4;
-        if (sx < wa.Left + 4) sx = cursor.X + 8;
-
-        if (sx < wa.Left + 4) sx = wa.Left + 4;
-        if (sy < wa.Top + 4) sy = wa.Top + 4;
-        if (sx + size.Width > wa.Right - 4) sx = wa.Right - size.Width - 4;
-        if (sy + size.Height > wa.Bottom - 4) sy = wa.Bottom - size.Height - 4;
-
-        return new System.Windows.Point(sx, sy);
     }
 
     public void LaunchSnake()
@@ -109,20 +109,43 @@ public sealed class TrayHost : IDisposable
 
     public void OpenSettings()
     {
-        if (_settings != null && _settings.IsVisible) { _settings.Activate(); return; }
-        _settings = new SettingsWindow();
-        _settings.Closed += (_, _) => _settings = null;
-        _settings.Show();
+        Log.Line("OpenSettings: enter");
+        try
+        {
+            if (_settings != null && _settings.IsVisible) { _settings.Activate(); Log.Line("OpenSettings: reuse"); return; }
+            _settings = new SettingsWindow();
+            _settings.Closed += (_, _) => _settings = null;
+            _settings.Show();
+            Log.Line("OpenSettings: shown");
+        }
+        catch (Exception ex) { Log.Exc("OpenSettings threw", ex); throw; }
     }
 
     public void Quit()
     {
+        var wState = _window == null ? "null" : (_window.IsVisible ? "visible" : "hidden");
+        var sState = _settings == null ? "null" : (_settings.IsVisible ? "visible" : "hidden");
+        var mState = _menu == null ? "null" : (_menu.IsVisible ? "visible" : "hidden");
+        Log.Line($"Quit: enter (window:{wState} settings:{sState} menu:{mState} icon:{(_icon != null ? "exists" : "null")})");
         _running = false;
-        _window?.Close();
-        _settings?.Close();
-        _menu?.Close();
+        try { _window?.Close(); Log.Line("Quit: snake window closed"); }
+        catch (Exception ex) { Log.Exc("Quit.Close(window)", ex); }
+        try { _settings?.Close(); Log.Line("Quit: settings closed"); }
+        catch (Exception ex) { Log.Exc("Quit.Close(settings)", ex); }
+        try { _menu?.Hide(); Log.Line("Quit: menu hidden"); }
+        catch (Exception ex) { Log.Exc("Quit.Hide(menu)", ex); }
         if (_icon != null) _icon.Visible = false;
-        System.Windows.Application.Current.Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown());
+        Log.Line("Quit: icon invisible, scheduling Shutdown");
+        System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            try
+            {
+                Log.Line("Quit.Scheduled: calling Shutdown");
+                System.Windows.Application.Current.Shutdown();
+                Log.Line("Quit.Scheduled: Shutdown returned");
+            }
+            catch (Exception ex) { Log.Exc("Quit.Scheduled.Shutdown threw", ex); throw; }
+        }));
     }
 
     private void IdleLoop()
