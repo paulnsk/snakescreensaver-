@@ -86,9 +86,11 @@ public sealed class TrayHost : IDisposable
 
     public void LaunchSnake()
     {
+        Log.Line($"LaunchSnake: enter, renderer={Settings.Render}");
         if (_window != null && _window.IsVisible)
         {
             _window.Activate();
+            Log.Line("LaunchSnake: reused existing");
             return;
         }
         if (_window != null)
@@ -99,12 +101,22 @@ public sealed class TrayHost : IDisposable
         _window = new MainWindow();
         _window.Closed += (_, _) => _window = null;
         _window.Show();
+        Log.Line("LaunchSnake: shown");
     }
 
     public void HideSnake()
     {
         _window?.Close();
         _window = null;
+    }
+
+    public void RestartSnakeIfVisible()
+    {
+        if (_window == null || !_window.IsVisible) return;
+        Log.Line("RestartSnakeIfVisible: closing current snake window");
+        try { _window.Close(); } catch (Exception ex) { Log.Exc("RestartSnakeIfVisible.Close", ex); }
+        _window = null;
+        LaunchSnake();
     }
 
     public void OpenSettings()

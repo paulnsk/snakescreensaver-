@@ -161,15 +161,63 @@ D:\d\SnakeScreensaver\publish\SnakeScreensaver.exe
 - **Лог-инфраструктура:** `Log.cs` + хуки в `App.xaml.cs` (AppDomain/Dispatcher/TaskScheduler).
   Лог в `%TEMP%\SnakeScreensaver.log`. Трейсы в TrayHost (ShowMenu/Quit) и TrayMenuWindow
   (Expander_StateChanged/Reposition). `Qu` и `Setting`s клики логируются.
-- **SkiaSharp миграция — планируется**, детали в AGENTS.md (раздел "План миграции").
+- **Skia миграция — реализована** (CPU backend через WriteableBitmap, т.к.
+  `AllowsTransparency=True` блокирует GPU `SKGLEView`):
+  - `Settings.Renderer` enum {Wpf, Skia} + сохранение в settings.json.
+  - В SettingsWindow добавлен раздел "🖥️ RENDERER" с двумя радио (WPF/Skia),
+    вверху перед RENDER MODE.
+  - `Snake/SnakeGameSkia.cs` (partial class `SnakeGame`): `SKBitmap` + `WriteableBitmap`,
+    per-frame `Marshal.Copy` BGRA → WPF `Image`. `SKCanvas.Clear(transparent)` →
+    рисование еды/сегментов/ленты/частиц одним батчем.
+  - `SnakeGame.xaml.cs` — `_isSkia` флаг; `OnRender`/`Start`/`SyncSegs`/`AddSegVisual`/
+    `Die*`/`EatFoodShared`/`TriggerBurst`/`CreateFood`/`CreateSeg`/`EnsureRibbonPath`/
+    `UpdateBallsColors` — ветвятся по `_isSkia`. Skia-сегменты интерполируются вручную
+    (Stored/To/MoveStart/MoveDuration), WPF-сегменты — через Storyboard-анимации как раньше.
+  - `App.xaml.cs` — CLI `--snake` для прямого запуска змейки в обход idle-таймера
+    (полезно для тестов/демо, не ломает основной поток).
+  - `TrayHost.LaunchSnake` теперь логирует renderer и show-event.
+  - Skia 4.150.0 + `SkiaSharp.NativeAssets.Win32`, `NoWarn=CS0618` (deprecated SKPath API).
+  - По умолчанию `Renderer = Wpf` как fallback; после визуальной проверки можно переключить на Skia.
 
 ## Open issues / next steps
 
+- **РЕАЛИЗОВАНО:** переключатель `Settings.Renderer { Wpf, Skia, WpfTurbo }` + чекбокс
+  `Settings.DropShadow`. Высота SettingsWindow 540→980. Баг WPF `_foods.Add(food)` в `CreateFood` починен.
+  **Apply в Settings перезапускает змейку** (`TrayHost.RestartSnakeIfVisible`).
+- **WPF TURBO — РЕАЛИЗОВАН** (третий режим): `DrawingContext`-based `SnakeTurboCanvas`,
+  переиспользование frozen `RadialGradientBrush`/`Pen` через hue-keyed кеши, glow halo
+  (RadialGradient без blur) вместо DropShadowEffect. Manual-интерполяция как в Skia
+  (Stored/To/MoveStart/MoveDuration). Тени ЦВЕТНЫЕ (в отличие от серых Skia теней),
+  дешёвые (DrawEllipse halo O(1) на сегмент без ImageFilter/blur).
+  - `SnakeTurboCanvas.cs` (new): Canvas subclass, OnRender → `Host.TurboRender`. Кеши
+    `_glow`/`_fill` (RadialGradientBrush), `_strokeColors` (SolidColorBrush),
+    `_pens` (Pen), `_foodGeo` (Geometry). Все frozen.
+  - `SnakeGameTurbo.cs` (new, partial class): `TurboInit/Resize/Reset/CreateSeg/AddFood/
+    EatFood/Burst/Redraw`; `TurboRender` диспетчер → `TurboDrawFoods/Balls/Ribbon/Particles`.
+    Manual interpolation по `Stored/To/MoveStart/MoveDuration` (= Skia путь).
+  - `SnakeGame.xaml`: добавлен `<snake:SnakeTurboCanvas x:Name="TurboCanvas" Visibility="Collapsed"/>`
+    в общий Grid (xmlns:snake объявлен).
+  - `SnakeGame.xaml.cs`: `_isTurbo` флаг; ветки в constructor/OnLoaded/InitFromSize/OnRender/
+    Start/StartBalls/SyncSegs/AddSegVisual/UpdateBallsColors/EnsureRibbonPath/DieBalls/
+    DieRibbon/EatFoodShared/TriggerBurst/CreateFood. WPF/Skia пути не тронут.
+  - `SettingsWindow.xaml/.cs`: третья радио "WPF TURBO".
+  - Smoke-тесты: 0 exceptions за 8s для `Render=2+Mode=0+DropShadow=true`,
+    `Render=2+Mode=1+DropShadow=true`, обратный smoke `Render=0+Mode=0+DropShadow=true`.
+- **Вывод пользователя (визуально):**
+  1. WPF быстрее Skia в этом проекте.
+  2. Тень даёт большую нагрузку на производительность в обоих рендерах.
+  3. Плавное движение (интерполяция) видно только в WPF при выключенной тени.
+  4. В Skia движение рывками — рисуется сразу новый шарик, без интерполяции.
+  5. В Skia тень СЕРАЯ, не цветная (`SKImageFilter.CreateBlur` теряет saturation).
+  6. **Итог: Skia в текущем виде не подходит.** WPF (без тени) — почти ОК, короткая
+     плавная, длинная — рывки.
+  7. **WPF TURBO ждёт визуальной проверки пользователем** на длинной змейке.
 - Не до конца подтверждён initial-позиционирование ShowMenu (нужен живой тест — открыть меню,
   раскрыть Expander — убедиться что якорь не дрейфит и низ на таскбаре).
-- Padding экспандера был пофиксен пользователем: `TextBlock Padding="20"` внутри стиля TrayExpander
-  (а не Padding на уровне Expander, как я пытался). Запомнить конвенцию: текст-контент экспандера
-  требует собственного Padding, не	level-уровневого.
-- Перф змейки при 50+ сегментах — временно смягчён. Финальное решение: **переключатель
-  Settings.Renderer { Wpf, Skia }**, реализовать Skia-режим (SkiaSharp.Views.WPF, SKGLEView),
-  НЕ ломая существующий WPF. Подробно — в AGENTS.md. Перед миграцией — снять baseline fps.
+- Padding экспандера был пофиксен пользователем: `TextBlock Padding="20"` внутри стиля TrayExpander.
+- **Skia perf/jank** — Skia в текущем виде (CPU bitmap + Marshal.Copy) НЕ устраивает пользователя.
+  Варианты "ускорить Skia" требуют профайлинга и кода. Пользователь ответил: НЕ заниматься
+  профилированием Skia — добавлен Turbo вместо.
+- **Skia DropShadow в Skia-режиме серый:** `SKImageFilter.CreateBlur` на `SKPaint_color.WithAlpha(120-160)`
+  даёт бледно-серое. В Turbo — цветная тень (radial gradient halo). Не дублировать в Skia
+  без запроса.

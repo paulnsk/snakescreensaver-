@@ -20,6 +20,9 @@ public partial class App : Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         Tray = new TrayHost();
         Tray.Start();
+
+        if (Array.Exists(e.Args, a => a == "--snake"))
+            Tray.LaunchSnake();
     }
 
     private void App_OnExit(object sender, ExitEventArgs e)

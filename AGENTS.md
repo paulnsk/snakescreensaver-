@@ -68,45 +68,80 @@ App.xaml                  — стили (TrayBtn, TrayBtnQuit, TrayExpander, Tr
   Dispatcher.BeginInvoke(Shutdown) вместо Invoke.
 - ✅ Initial позиция ShowMenu теперь идёт через тот же ComputeRestLocation, что и Reposition
   (якоря фиксируются в ShowMenu, окно показывается в off-screen -10000, затем Reposition).
-- ❓ Производительность змейки при ~50 сегментах — применены простые фиксы (BlurRadius↓).
-  Финальное решение — добавить **переключатель режимов рендера** (Settings.Renderer: Wpf / Skia),
-  реализовать режим Skia (SkiaSharp.Views.WPF, SKGLEView), НЕ ломая существующий WPF.
-  См. AGENTS.md "План миграции".
+- ✅ **WPF TURBO — реализован** (третий рендер, DrawingContext-based). `SnakeTurboCanvas`
+  (Canvas subclass, OnRender → `Host.TurboRender`); кеши frozen `RadialGradientBrush`
+  (glow + fill) + `Pen` + `Geometry` по hue-key; manual-интерполяция как в Skia;
+  цветная тень как RadialGradient halo (без blur-фильтра, без DropShadowEffect).
+  - `Snake/SnakeTurboCanvas.cs` (new): Canvas + 5 кешей (`_glow`, `_fill`,
+    `_strokeColors`, `_pens`, `_foodGeo`); все значения `Freeze()`. OnRender
+    делегирует в `Host.TurboRender`.
+  - `Snake/SnakeGameTurbo.cs` (new, partial): `TurboInit/Resize/Reset/CreateSeg/
+    AddFood/EatFood/Burst/Redraw/Render`. `Render` диспетчер → `TurboDrawFoods/Balls/
+    Ribbon/Particles`. Manual interpolation по `Stored/To/MoveStart/MoveDuration`.
+  - `SnakeGame.xaml`: добавлен `<snake:SnakeTurboCanvas x:Name="TurboCanvas"
+    Visibility="Collapsed"/>` в общий Grid (xmlns:snake объявлен).
+  - `SnakeGame.xaml.cs`: `_isTurbo` флаг; ветки в 12 местах (constructor/OnLoaded/
+    InitFromSize/OnRender/Start/StartBalls/SyncSegs/AddSegVisual/UpdateBallsColors/
+    EnsureRibbonPath/DieBalls/DieRibbon/EatFoodShared/TriggerBurst/CreateFood).
+    **Legacy WPF и Skia пути не изменены** — только новый `_isTurbo` добавлен в
+    параллельных ветках.
+  - `Settings.Renderer` enum: `Wpf=0, Skia=1, WpfTurbo=2`.
+  - `SettingsWindow.xaml/.cs`: третья радио "WPF TURBO".
+  - Smoke-тесты: 0 exceptions за 8s в трёх конфигах (Turbo+Balls+Shadow, Turbo+Ribbon+
+    Shadow, legacy WPF+Balls+Shadow).
+  - **Визуальная проверка пользователем — ожидается** на длинной змейке.
+- ✅ **Apply в Settings теперь перезапускает змейку:** `TrayHost.RestartSnakeIfVisible()`
+  вызывается из `SettingsWindow.OK_Click` после `Settings.Save()`. Только если змейка уже
+  видна; если нет — no-op.
+- ✅ **Skia миграция — реализована** (CPU backend через WriteableBitmap, т.к.
+  `AllowsTransparency=True` блокирует GPU `SKGLEView` ≠ HwndHost в прозрачном WPF-окне).
+  - `Settings.Renderer` enum {Wpf, Skia} + сохранение в settings.json (ключ `Render`).
+  - В SettingsWindow добавлен раздел "🖥️ RENDERER" с двумя радио (WPF/Skia),
+    вверху перед RENDER MODE.
+  - `Snake/SnakeGameSkia.cs` (partial class `SnakeGame`): `SKBitmap` + `WriteableBitmap`,
+    per-frame `Marshal.Copy` BGRA → WPF `Image`. `SKCanvas.Clear(transparent)` →
+    рисование еды/сегментов/ленты/частиц одним батчем.
+  - `SnakeGame.xaml.cs` — `_isSkia` флаг; ветвление в OnRender/Start/SyncSegs/AddSegVisual/
+    Die*/EatFoodShared/TriggerBurst/CreateFood/CreateSeg/EnsureRibbonPath/UpdateBallsColors.
+    Skia-сегменты интерполируются вручную (Stored/To/MoveStart/MoveDuration).
+  - `App.xaml.cs` — CLI `--snake` для прямого запуска (тесты/демо).
+  - `SnakeGame.xaml` — обёрнут в Grid с Canvas (WPF путь) + Image (Skia путь), Visibility
+    переключается в конструкторе по `_isSkia`.
+  - Skia 4.150.0 + `SkiaSharp.NativeAssets.Win32`, `NoWarn=CS0618` (устаревший SKPath API).
+  - По умолчанию `Renderer = Wpf` (безобидный fallback).
+  - **Визуальная проверка пользователем — проведена.** Skia движется рывками (нет
+    плавности у одиночных шаров), тень серая не цветная (blur с низкой alpha теряет
+    saturation). WPF — плавнее, но при длинной змейке тоже рывки. **Skia НЕ подходит без
+    серьёзного ускорения** — см. раздел "Skia perf/jank" в PLAN.md.
 
-## План миграции рендера змейки на SkiaSharp
+## План миграции рендера змейки на SkiaSharp — РЕАЛИЗОВАН, НО НЕ ПОДХОДИТ (без ускорения)
 
 **Цель:** убрать дорогие WPF-визуалы (Ellipse + DropShadowEffect на каждый сегмент) и перенести
-рендер на SkiaSharp GPU (SKGLEView), сохранив всю графику (HSL/gradient/blur/частицы/еду).
+рендер на SkiaSharp CPU (`SKBitmap` → `WriteableBitmap`), сохранив всю графику (HSL/gradient/
+blur/частицы/еду).
 
-**Принципы:**
-- UI (трей, меню, настройки) — остаётся на WPF, не трогается.
-- В **опции** (Settings) добавить переключатель режимов рендера змейки: **Skia** / **WPF**.
-  Оба режима должны работать; существующий WPF-рендер НЕ ломать — он остаётся как fallback,
-  по умолчанию можно Skia (после реализации и проверки).
-- Змейка изолирована в `Snake/SnakeGame.xaml(.cs)` (UserControl, хостится в MainWindow.xaml).
-  Меняется содержимое этого UserControl'а (или сам класс) на SKGLEView-реализацию для режима Skia;
-  WPF-реализация остаётся в том же файле или отдельной ветке через флаг.
+**Почему CPU, а не GPU:** MainWindow использует `AllowsTransparency=True` для прозрачного
+fullscreen-оверлея поверх живого десктопа. GPU `SKGLEView` (через `HwndHost`) в таком окне не
+работает — известное ограничение WPF. CPU `SKBitmap` + `WriteableBitmap` совместим с
+прозрачностью и всё равно быстрее сотен WPF-визуалов (один батч-дрaw против N элементов с
+DropShadowEffect).
 
-**План шагов:**
-1. Добавить NuGet `SkiaSharp.Views.WPF` (+ native bundled через
-   `IncludeNativeLibrariesForSelfExtract` в csproj для single-file publish).
-2. Добавить `Settings.Renderer` enum { Wpf, Skia } (по умолчанию Wpf — пока не подтверждена
-   стабильность Skia) + запись/чтение из settings.json + UI в SettingsWindow.
-3. Создать `Snake/SnakeGameSkia.cs` — partial class `SnakeGame` со встроенным SKGLEView ребёнком,
-   реализация `OnPaintSurface(SKPaintSurfaceEventArgs)` — рисование кружков/полосы/частиц/еды
-   одним `SKCanvas`. Логику ИИ (BFS) и игровое состояние — переиспользуется из текущего кода
-   (вынести в `SnakeEngine.cs`, не привязанный ни к WPF, ни к Skia).
-4. В `MainWindow.xaml` (или в `SnakeGame` xaml.cs) подменять рендер по `Settings.Renderer`,
-   не ломая существующий WPF-путь.
-5. Проверить что SingleFile publish включает native Skia libraries
-   (`IncludeNativeLibrariesForSelfExtract=true`, размер вырастет ~10 МБ).
-6. Сравнить перф: BFS + 100 сегментов — должно быть в несколько раз быстрее на GPU в режиме Skia.
+**Что сделано:**
+1. ✅ NuGet `SkiaSharp` 4.150.0 + `SkiaSharp.NativeAssets.Win32` (для single-file publish
+   `IncludeNativeLibrariesForSelfExtract` уже включён в csproj).
+2. ✅ `Settings.Renderer` enum { Wpf, Skia } (по умолчанию Wpf) + запись/чтение из settings.json
+   (ключ `Render`) + UI в SettingsWindow (раздел "🖥️ RENDERER" вверху).
+3. ✅ `Snake/SnakeGameSkia.cs` — partial class `SnakeGame` со встроенным `SKBitmap`+`WriteableBitmap`
+   ребёнком (`Image x:Name="SkiaImage"` в SnakeGame.xaml). Per-frame `Marshal.Copy` BGRA.
+   Рисование еды/сегментов/ленты/частиц одним `SKCanvas`.
+4. ✅ В конструкторе `SnakeGame` по `_isSkia` переключается `Field.Visibility` (WPF Canvas)
+   vs `SkiaImage.Visibility` (Skia Image). WPF-путь не сломан.
+5. ✅ SingleFile publish — `SkiaSharp.NativeAssets.Win32` попадёт через
+   `IncludeNativeLibrariesForSelfExtract` (уже в csproj).
+6. ⏳ Сравнить перф (BFS + 100 сегментов) — после демо пользователя.
 
-**ПЕРЕД началом миграции:**
-- Прочитать этот файл и PLAN.md полностью.
-- Прогнать текущую WPF-версию с длинной змейкой (50+ сегментов), снять baseline fps.
-- Зафиксировать все правила в AGENTS.md (этот файл) — обновлять после каждого шага.
-- После каждого шага миграции — build + smoke-test + запись в лог + обновить PLAN.md.
+**Дым-тест:** `Settings.Render=1` + `SnakeScreensaver.exe --snake` → окно открылось, 0 exceptions
+в логе за 8 секунд. **Визуальная проверка пользователем ещё не проведена.**
 
 ## Правила для агентов
 
@@ -126,6 +161,10 @@ App.xaml                  — стили (TrayBtn, TrayBtnQuit, TrayExpander, Tr
 11. **TrayMenu positioning:** якоря фиксируются один раз в InitAnchor.
     ComputeRestLocation/Reposition — единый путь. Не вводи повторный вызов
     cursor-зависимого ComputeMenuLocation-style.
+12. **CLI `--snake`** (в App.OnStartup) — режим отладки/демо для агента/тестов, не фича
+    пользователя. Сохранять в репозитории, не упоминать в UI.
+13. **Skia perf:** `SKBitmap` → `WriteableBitmap` per-frame `Marshal.Copy` BGRA — кандидат
+    на оптимизацию. Профайлинг — после очистки контекста (см. PLAN.md "Skia perf/jank").
 
 ## Полезные ссылки
 

@@ -25,6 +25,9 @@ public partial class SnakeGame : UserControl
     private double _deadAt;
     private double Now => _sw.Elapsed.TotalSeconds;
 
+    private bool _isSkia;
+    private bool _isTurbo;
+
     private Settings.RenderMode _mode = Settings.RenderMode.Balls;
     private bool _rainbow = true;
     private double _hueOffset = 0;
@@ -55,8 +58,25 @@ public partial class SnakeGame : UserControl
         InitializeComponent();
         _mode = Settings.Mode;
         _rainbow = Settings.Rainbow;
-        Field.UseLayoutRounding = true;
-        Field.SnapsToDevicePixels = true;
+        _isSkia = Settings.Render == Settings.Renderer.Skia;
+        _isTurbo = Settings.Render == Settings.Renderer.WpfTurbo;
+        if (_isSkia)
+        {
+            Field.Visibility = Visibility.Collapsed;
+            SkiaImage.Visibility = Visibility.Visible;
+        }
+        else if (_isTurbo)
+        {
+            Field.Visibility = Visibility.Collapsed;
+            SkiaImage.Visibility = Visibility.Collapsed;
+            TurboCanvas.Visibility = Visibility.Visible;
+            TurboCanvas.Host = this;
+        }
+        else
+        {
+            Field.UseLayoutRounding = true;
+            Field.SnapsToDevicePixels = true;
+        }
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         SizeChanged += (_, _) => InitFromSize(true);
@@ -64,6 +84,8 @@ public partial class SnakeGame : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        if (_isSkia) SkiaInit();
+        else if (_isTurbo) TurboInit();
         Start();
         _sw.Start();
         CompositionTarget.Rendering += OnRender;
@@ -89,6 +111,8 @@ public partial class SnakeGame : UserControl
         {
             _cols = newCols; _rows = newRows;
         }
+        if (_isSkia) SkiaResize();
+        else if (_isTurbo) TurboResize();
     }
 
     private void OnRender(object? sender, EventArgs e)
@@ -97,9 +121,45 @@ public partial class SnakeGame : UserControl
         if (_dead)
         {
             if (t - _deadAt >= 1.7) Start();
+            else if (_isSkia) SkiaRedraw(t);
+            else if (_isTurbo) TurboRedraw(t);
             return;
         }
         if (_cols == 0) return;
+        if (_isSkia)
+        {
+            if (_mode == Settings.RenderMode.Balls)
+            {
+                if (t - _lastStepTime >= _intervalSec)
+                {
+                    _lastStepTime = t;
+                    StepBalls();
+                }
+            }
+            else
+            {
+                UpdateRibbon(t, _rainbow);
+            }
+            SkiaRedraw(t);
+            return;
+        }
+        if (_isTurbo)
+        {
+            if (_mode == Settings.RenderMode.Balls)
+            {
+                if (t - _lastStepTime >= _intervalSec)
+                {
+                    _lastStepTime = t;
+                    StepBalls();
+                }
+            }
+            else
+            {
+                UpdateRibbon(t, _rainbow);
+            }
+            TurboRedraw(t);
+            return;
+        }
         if (_mode == Settings.RenderMode.Balls)
         {
             if (t - _lastStepTime >= _intervalSec)
@@ -124,7 +184,7 @@ public partial class SnakeGame : UserControl
         InitFromSize();
         _hueOffset = _rng.NextDouble() * 360.0;
         _started = true;
-        Field.Children.Clear();
+        if (!_isSkia) Field.Children.Clear();
         _segs.Clear();
         _foods.Clear();
         _snake.Clear();
@@ -133,10 +193,13 @@ public partial class SnakeGame : UserControl
         _ribbonSamples.Clear();
         _ribbonReady = false;
 
+        if (_isSkia) SkiaReset();
+        else if (_isTurbo) TurboReset();
+
         if (_mode == Settings.RenderMode.Balls) StartBalls();
         else StartRibbon();
 
-        if (_mode == Settings.RenderMode.Balls) UpdateBallsColors(0);
+        if (!_isSkia && _mode == Settings.RenderMode.Balls) UpdateBallsColors(0);
 
         for (int i = 0; i < 5; i++) SpawnFood();
 
@@ -154,12 +217,24 @@ public partial class SnakeGame : UserControl
         {
             var cell = (X: cx - i, Y: cy);
             _snake.Add(cell);
-            var seg = CreateSeg();
             var pos = CellCenter(cell);
-            Canvas.SetLeft(seg.Ell, pos.X - seg.Ell.Width / 2);
-            Canvas.SetTop(seg.Ell, pos.Y - seg.Ell.Height / 2);
-            seg.Stored = pos;
-            _segs.Add(seg);
+            if (_isSkia || _isTurbo)
+            {
+                var seg = _isSkia ? SkiaCreateSeg() : TurboCreateSeg();
+                seg.Stored = pos;
+                seg.To = pos;
+                seg.MoveStart = Now;
+                seg.MoveDuration = _intervalSec;
+                _segs.Add(seg);
+            }
+            else
+            {
+                var seg = CreateSeg();
+                Canvas.SetLeft(seg.Ell, pos.X - seg.Ell.Width / 2);
+                Canvas.SetTop(seg.Ell, pos.Y - seg.Ell.Height / 2);
+                seg.Stored = pos;
+                _segs.Add(seg);
+            }
         }
         _dirX = 1; _dirY = 0;
     }
@@ -188,6 +263,7 @@ public partial class SnakeGame : UserControl
 
     private void EnsureRibbonPath(bool on)
     {
+        if (_isSkia || _isTurbo) return;
         if (on && _ribbonPath == null)
         {
             _ribbonPath = new Path
@@ -219,7 +295,7 @@ public partial class SnakeGame : UserControl
                 Opacity = 0.95,
                 RenderingBias = RenderingBias.Performance
             };
-            _ribbonPath.Effect = _ribbonEffect;
+            if (Settings.DropShadow) _ribbonPath.Effect = _ribbonEffect;
 
             Field.Children.Add(_ribbonPath);
         }
@@ -293,22 +369,39 @@ public partial class SnakeGame : UserControl
     private void SyncSegs()
     {
         var dur = TimeSpan.FromSeconds(_intervalSec);
+        var now = Now;
         for (int i = 0; i < _segs.Count; i++)
         {
             if (i >= _snake.Count) break;
             var seg = _segs[i];
             var target = CellCenter(_snake[i]);
-            seg.AnimateTo(target, dur);
+            if (_isSkia || _isTurbo)
+            {
+                seg.Stored = seg.To;
+                seg.To = target;
+                seg.MoveStart = now;
+                seg.MoveDuration = _intervalSec;
+            }
+            else
+            {
+                seg.AnimateTo(target, dur);
+            }
         }
     }
 
     private void AddSegVisual()
     {
-        var seg = CreateSeg();
         var origin = _segs.Count > 0 ? _segs[0].Stored : CellCenter(_snake[0]);
-        Canvas.SetLeft(seg.Ell, origin.X - seg.Ell.Width / 2);
-        Canvas.SetTop(seg.Ell, origin.Y - seg.Ell.Height / 2);
+        var seg = _isSkia ? SkiaCreateSeg() : (_isTurbo ? TurboCreateSeg() : CreateSeg());
+        if (!_isSkia && !_isTurbo)
+        {
+            Canvas.SetLeft(seg.Ell, origin.X - seg.Ell.Width / 2);
+            Canvas.SetTop(seg.Ell, origin.Y - seg.Ell.Height / 2);
+        }
         seg.Stored = origin;
+        seg.To = origin;
+        seg.MoveStart = Now;
+        seg.MoveDuration = _intervalSec;
         _segs.Insert(0, seg);
     }
 
@@ -336,6 +429,7 @@ public partial class SnakeGame : UserControl
 
     private void UpdateBallsColors(double t)
     {
+        if (_isSkia || _isTurbo) return;
         for (int i = 0; i < _segs.Count; i++)
         {
             var s = _segs[i];
@@ -343,7 +437,7 @@ public partial class SnakeGame : UserControl
             s.Fill.GradientStops[0].Color = Hsl(hue, 0.85, 0.82);
             s.Fill.GradientStops[1].Color = Hsl(hue, 1.0, 0.5);
             s.Stroke.Color = Hsl((hue + 320) % 360.0, 1.0, 0.6);
-            s.Shadow.Color = Hsl(hue, 1.0, 0.55);
+            if (s.Shadow != null) s.Shadow.Color = Hsl(hue, 1.0, 0.55);
         }
     }
 
@@ -494,7 +588,8 @@ public partial class SnakeGame : UserControl
         {
             var seg = _segs[i];
             var hue = (Now * 55.0 + i * 11.0) % 360.0;
-            TriggerBurst(seg.Stored, hue, 18);
+            TriggerBurst((_isSkia || _isTurbo) ? seg.To : seg.Stored, hue, 18);
+            if (_isSkia || _isTurbo) continue;
             var fade = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.55))
             {
                 BeginTime = TimeSpan.FromSeconds(i * 0.012),
@@ -514,6 +609,7 @@ public partial class SnakeGame : UserControl
             var hue = (i * 11.0 + Now * 55.0) % 360.0;
             TriggerBurst(samples[i], hue, 12);
         }
+        if (_isSkia || _isTurbo) return;
         if (_ribbonPath != null)
         {
             var fade = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.6))
@@ -524,6 +620,8 @@ public partial class SnakeGame : UserControl
 
     private void EatFoodShared(Food f)
     {
+        if (_isSkia) { SkiaEatFood(f); return; }
+        if (_isTurbo) { TurboEatFood(f); return; }
         Field.Children.Remove(f.Shape);
         _foods.Remove(f);
         var pos = CellCenter(f.Cell);
@@ -556,6 +654,8 @@ public partial class SnakeGame : UserControl
 
     private void TriggerBurst(Point center, double hue, int count)
     {
+        if (_isSkia) { SkiaBurst(center, hue, count); return; }
+        if (_isTurbo) { TurboBurst(center, hue, count); return; }
         for (int i = 0; i < count; i++)
         {
             var ph = (hue + _rng.Next(-30, 30) + 360) % 360.0;
@@ -617,16 +717,20 @@ public partial class SnakeGame : UserControl
         ell.Fill = fill;
         var stroke = new SolidColorBrush(Colors.White);
         ell.Stroke = stroke;
-        var dse = new DropShadowEffect
+        DropShadowEffect? dse = null;
+        if (Settings.DropShadow)
         {
-            Color = Colors.Magenta,
-            BlurRadius = 16,
-            ShadowDepth = 8,
-            Direction = 320,
-            Opacity = 0.95,
-            RenderingBias = RenderingBias.Performance
-        };
-        ell.Effect = dse;
+            dse = new DropShadowEffect
+            {
+                Color = Colors.Magenta,
+                BlurRadius = 16,
+                ShadowDepth = 8,
+                Direction = 320,
+                Opacity = 0.95,
+                RenderingBias = RenderingBias.Performance
+            };
+            ell.Effect = dse;
+        }
         Field.Children.Add(ell);
         return new Seg
         {
@@ -666,6 +770,28 @@ public partial class SnakeGame : UserControl
     {
         var hue = _rng.NextDouble() * 360.0;
         var kind = _rng.Next(5);
+        var growth = kind == 2 ? 3 : (kind == 1 ? 2 : 1);
+        var food = new Food
+        {
+            Cell = cell,
+            Hue = hue,
+            Kind = kind,
+            Growth = growth,
+            PulseFreq = 2 * Math.PI / (_rng.NextDouble() * 0.4 + 0.5),
+            RotSpeed = 1.0 / (_rng.NextDouble() * 4 + 3)
+        };
+        if (_isSkia)
+        {
+            SkiaAddFood(food);
+            _foods.Add(food);
+            return;
+        }
+        if (_isTurbo)
+        {
+            TurboAddFood(food);
+            _foods.Add(food);
+            return;
+        }
         Shape sh;
         double w = Cell * 0.78, h = Cell * 0.78;
 
@@ -700,16 +826,18 @@ public partial class SnakeGame : UserControl
         sh.StrokeThickness = 1.8;
         sh.UseLayoutRounding = true;
 
-        var dse = new DropShadowEffect
+        if (Settings.DropShadow)
         {
-            Color = Hsl(hue, 1.0, 0.55),
-            BlurRadius = 18,
-            ShadowDepth = 4,
-            Direction = 315,
-            Opacity = 0.95,
-            RenderingBias = RenderingBias.Performance
-        };
-        sh.Effect = dse;
+            sh.Effect = new DropShadowEffect
+            {
+                Color = Hsl(hue, 1.0, 0.55),
+                BlurRadius = 18,
+                ShadowDepth = 4,
+                Direction = 315,
+                Opacity = 0.95,
+                RenderingBias = RenderingBias.Performance
+            };
+        }
 
         var pos = CellCenter(cell);
         Canvas.SetLeft(sh, pos.X - w / 2);
@@ -737,13 +865,8 @@ public partial class SnakeGame : UserControl
 
         Field.Children.Add(sh);
 
-        _foods.Add(new Food
-        {
-            Cell = cell,
-            Hue = hue,
-            Shape = sh,
-            Growth = kind == 2 ? 3 : (kind == 1 ? 2 : 1)
-        });
+        food.Shape = sh;
+        _foods.Add(food);
     }
 
     private static Geometry FoodGeometry(int kind)
@@ -817,14 +940,29 @@ public partial class SnakeGame : UserControl
             (byte)Math.Round((b1 + m) * 255));
     }
 
+    private sealed class Food
+    {
+        public (int X, int Y) Cell;
+        public double Hue;
+        public int Kind;
+        public Shape? Shape;
+        public int Growth;
+        public double SpawnTime;
+        public double PulseFreq;
+        public double RotSpeed;
+    }
+
     private sealed class Seg
     {
         public Ellipse Ell = null!;
         public RadialGradientBrush Fill = null!;
         public SolidColorBrush Stroke = null!;
-        public DropShadowEffect Shadow = null!;
+        public DropShadowEffect? Shadow;
         public double Half;
         public Point Stored;
+        public Point To;
+        public double MoveStart;
+        public double MoveDuration;
 
         public void AnimateTo(Point center, TimeSpan dur)
         {
@@ -834,13 +972,5 @@ public partial class SnakeGame : UserControl
             Ell.BeginAnimation(Canvas.TopProperty, ay);
             Stored = center;
         }
-    }
-
-    private sealed class Food
-    {
-        public (int X, int Y) Cell;
-        public double Hue;
-        public Shape Shape = null!;
-        public int Growth;
     }
 }

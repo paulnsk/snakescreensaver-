@@ -3,9 +3,14 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:snake="clr-namespace:SnakeScreensaver.Snake"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800"
              Background="Transparent"
              Focusable="True">
-    <Canvas x:Name="Field"/>
+    <Grid>
+        <Canvas x:Name="Field"/>
+        <Image x:Name="SkiaImage" Visibility="Collapsed" Stretch="None"/>
+        <snake:SnakeTurboCanvas x:Name="TurboCanvas" Visibility="Collapsed"/>
+    </Grid>
 </UserControl>

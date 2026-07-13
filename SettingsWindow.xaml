@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Snake Settings"
-        Width="560" Height="540"
+        Width="560" Height="980"
         WindowStyle="None"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
@@ -48,7 +48,14 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Orientation="Vertical">
 
-                        <TextBlock Text="🎮 RENDER MODE" Style="{StaticResource SettingsLabel}"/>
+                        <TextBlock Text="🖥️ RENDERER" Style="{StaticResource SettingsLabel}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,6">
+                            <RadioButton x:Name="RendererWpf" Content="WPF (legacy)" GroupName="rnd" Style="{StaticResource TrayRadio}" Checked="Renderer_Checked"/>
+                            <RadioButton x:Name="RendererSkia" Content="Skia" GroupName="rnd" Style="{StaticResource TrayRadio}" Checked="Renderer_Checked" Margin="14,0,0,0"/>
+                            <RadioButton x:Name="RendererWpfTurbo" Content="WPF TURBO" GroupName="rnd" Style="{StaticResource TrayRadio}" Checked="Renderer_Checked" Margin="14,0,0,0"/>
+                        </StackPanel>
+
+                        <TextBlock Text="🎮 RENDER MODE" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
                         <StackPanel Orientation="Horizontal" Margin="0,6">
                             <RadioButton x:Name="RenderBalls" Content="⚽ Balls" GroupName="rm" Style="{StaticResource TrayRadio}" Checked="Render_Checked"/>
                             <RadioButton x:Name="RenderRibbon" Content="🌀 Ribbon" GroupName="rm" Style="{StaticResource TrayRadio}" Checked="Render_Checked" Margin="14,0,0,0"/>
@@ -62,6 +69,9 @@
 
                         <TextBlock Text="🌈 ANIMATED RAINBOW" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
                         <CheckBox x:Name="RainbowChk" Content="per-frame color cycling" Style="{StaticResource SettingsCheckbox}" Checked="Rainbow_Changed" Unchecked="Rainbow_Changed"/>
+
+                        <TextBlock Text="🌑 DROP SHADOW" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
+                        <CheckBox x:Name="DropShadowChk" Content="glow shadow under snake (perf hit; disable for slow GPU)" Style="{StaticResource SettingsCheckbox}" Checked="DropShadow_Changed" Unchecked="DropShadow_Changed"/>
 
                         <TextBlock Text="⏰ IDLE LAUNCH (minutes)" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
                         <Slider x:Name="IdleSlider" Minimum="0" Maximum="60" TickFrequency="1" IsSnapToTickEnabled="True"
