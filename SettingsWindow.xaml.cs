@@ -18,6 +18,7 @@ public partial class SettingsWindow : Window
         ExitMouse.IsChecked = Settings.Exit == Settings.ExitMode.MouseMove;
         RainbowChk.IsChecked = Settings.Rainbow;
         DropShadowChk.IsChecked = Settings.DropShadow;
+        LivingSnakeChk.IsChecked = Settings.LivingSnake;
         IdleSlider.Value = Settings.IdleMinutes;
         StartupChk.IsChecked = Settings.RunAtStartup;
     }
@@ -49,6 +50,11 @@ public partial class SettingsWindow : Window
     private void DropShadow_Changed(object sender, RoutedEventArgs e)
     {
         Settings.DropShadow = DropShadowChk.IsChecked == true;
+    }
+
+    private void LivingSnake_Changed(object sender, RoutedEventArgs e)
+    {
+        Settings.LivingSnake = LivingSnakeChk.IsChecked == true;
     }
 
     private void Idle_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

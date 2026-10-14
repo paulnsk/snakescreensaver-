@@ -19,6 +19,7 @@ internal static class Settings
     public static bool RunAtStartup = false;
     public static Renderer Render = Renderer.Wpf;
     public static bool DropShadow = true;
+    public static bool LivingSnake = true;
 
     private static string Dir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SnakeScreensaver");
     private static string FilePath => Path.Combine(Dir, "settings.json");
@@ -38,6 +39,7 @@ internal static class Settings
             IdleMinutes = 5;
             Render = Renderer.Wpf;
             DropShadow = true;
+            LivingSnake = true;
             RunAtStartup = ReadStartupFlag();
             if (!File.Exists(FilePath)) return;
             var txt = File.ReadAllText(FilePath);
@@ -47,6 +49,7 @@ internal static class Settings
             if (MatchInt(txt, "IdleMinutes", out var im) && im >= 0 && im <= 240) IdleMinutes = im;
             if (MatchInt(txt, "Render", out var rr)) Render = (Renderer)rr;
             if (MatchBool(txt, "DropShadow", out var ds)) DropShadow = ds;
+            if (MatchBool(txt, "LivingSnake", out var ls)) LivingSnake = ls;
             if (MatchBool(txt, "RunAtStartup", out var rs)) RunAtStartup = rs;
         }
         catch { }
@@ -65,6 +68,7 @@ internal static class Settings
                 $"  \"IdleMinutes\": {IdleMinutes},\n" +
                 $"  \"Render\": {(int)Render},\n" +
                 $"  \"DropShadow\": {(DropShadow ? "true" : "false")},\n" +
+                $"  \"LivingSnake\": {(LivingSnake ? "true" : "false")},\n" +
                 $"  \"RunAtStartup\": {(RunAtStartup ? "true" : "false")}\n" +
                 "}";
             File.WriteAllText(FilePath, json);

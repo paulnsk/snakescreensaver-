@@ -45,6 +45,7 @@ public partial class SnakeGame
     {
         _turboParticles.Clear();
         _turboEatPopStart = -1;
+        TurboResetFeeding();
     }
 
     private Seg TurboCreateSeg() => new Seg { Half = Cell * 0.46 };
@@ -55,7 +56,8 @@ public partial class SnakeGame
     {
         _foods.Remove(f);
         var pos = CellCenter(f.Cell);
-        TurboBurst(pos, f.Hue, 28);
+        if (Settings.LivingSnake) TurboSwallow(f);
+        else TurboBurst(pos, f.Hue, 28);
         _hueOffset = (_hueOffset + 33.0) % 360.0;
         _turboEatPopStart = Now;
     }
@@ -87,6 +89,7 @@ public partial class SnakeGame
     private void TurboRedraw(double t)
     {
         _turboNow = t;
+        TurboUpdateFeeding(t);
         TurboCanvas.InvalidateNow();
         foreach (var view in _turboViews) view.InvalidateNow();
     }
@@ -97,6 +100,11 @@ public partial class SnakeGame
         TurboDrawFoods(dc, canvas, t);
         if (_mode == Settings.RenderMode.Balls) TurboDrawBalls(dc, canvas, t);
         else TurboDrawRibbon(dc, canvas, t);
+        if (Settings.LivingSnake)
+        {
+            TurboDrawSwallows(dc, canvas, t);
+            TurboDrawFace(dc, canvas, t);
+        }
         TurboDrawParticles(dc, canvas, t);
     }
 
@@ -117,12 +125,14 @@ public partial class SnakeGame
         {
             for (int i = _segs.Count - 1; i >= 0; i--)
             {
+                if (Settings.LivingSnake && i == 0) continue;
                 var seg = _segs[i];
                 var progress = seg.MoveDuration > 0 ? Math.Clamp((t - seg.MoveStart) / seg.MoveDuration, 0, 1) : 1;
                 var curX = seg.Stored.X + (seg.To.X - seg.Stored.X) * progress;
                 var curY = seg.Stored.Y + (seg.To.Y - seg.Stored.Y) * progress;
                 var hue = (_hueOffset + (_rainbow ? t * 55.0 : 0) + i * 11.0) % 360.0;
-                var r = radius * (i == 0 ? pop : 1);
+                var swell = TurboDigestScale(i * Cell, ref hue);
+                var r = radius * (i == 0 ? pop : swell);
                 var halo = r * 1.45;
                 if (!canvas.WorldBounds.IsEmpty && !canvas.WorldBounds.IntersectsWith(new Rect(curX + 4 - halo, curY + 6 - halo, halo * 2, halo * 2))) continue;
                 var glow = canvas.GetGlowImage((int)hue, radius * 1.45);
@@ -133,12 +143,14 @@ public partial class SnakeGame
 
         for (int i = _segs.Count - 1; i >= 0; i--)
         {
+            if (Settings.LivingSnake && i == 0) continue;
             var seg = _segs[i];
             var progress = seg.MoveDuration > 0 ? Math.Clamp((t - seg.MoveStart) / seg.MoveDuration, 0, 1) : 1;
             var curX = seg.Stored.X + (seg.To.X - seg.Stored.X) * progress;
             var curY = seg.Stored.Y + (seg.To.Y - seg.Stored.Y) * progress;
             var hue = (_hueOffset + (_rainbow ? t * 55.0 : 0) + i * 11.0) % 360.0;
-            var r = radius * (i == 0 ? pop : 1);
+            var swell = TurboDigestScale(i * Cell, ref hue);
+            var r = radius * (i == 0 ? pop : swell);
             if (!canvas.WorldBounds.IsEmpty && !canvas.WorldBounds.IntersectsWith(new Rect(curX - r - 1, curY - r - 1, r * 2 + 2, r * 2 + 2))) continue;
             var hueKey = (int)hue;
             var fill = canvas.GetFillImage(hueKey, radius);
@@ -196,6 +208,11 @@ public partial class SnakeGame
     private void TurboDrawRibbon(DrawingContext dc, SnakeTurboCanvas canvas, double t)
     {
         if (_ribbonSamples.Count < 2 || !_ribbonReady) return;
+        if (Settings.LivingSnake)
+        {
+            TurboDrawDigestingRibbon(dc, canvas, t);
+            return;
+        }
         var head = _ribbonSamples[0];
         var tail = _ribbonSamples[^1];
         if (Len(head, tail) < 0.001) tail = new Point(head.X + 1, head.Y);

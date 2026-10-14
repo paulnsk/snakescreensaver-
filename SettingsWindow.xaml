@@ -73,6 +73,11 @@
                         <TextBlock Text="🌑 DROP SHADOW" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
                         <CheckBox x:Name="DropShadowChk" Content="glow shadow under snake (perf hit; disable for slow GPU)" Style="{StaticResource SettingsCheckbox}" Checked="DropShadow_Changed" Unchecked="DropShadow_Changed"/>
 
+                        <TextBlock Text="😋 HUNGRY SNAKE" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
+                        <CheckBox x:Name="LivingSnakeChk" Content="animated mouth, bites &amp; digestion" Style="{StaticResource SettingsCheckbox}"
+                                  IsEnabled="{Binding IsChecked, ElementName=RendererWpfTurbo}"
+                                  Checked="LivingSnake_Changed" Unchecked="LivingSnake_Changed"/>
+
                         <TextBlock Text="⏰ IDLE LAUNCH (minutes)" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
                         <Slider x:Name="IdleSlider" Minimum="0" Maximum="60" TickFrequency="1" IsSnapToTickEnabled="True"
                                 Style="{StaticResource SettingsSlider}" AutoToolTipPlacement="TopLeft"
