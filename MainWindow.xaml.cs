@@ -30,6 +30,9 @@ public partial class MainWindow : Window
 
         HideFromAltTab();
 
+        if (Settings.Render == Settings.Renderer.WpfTurbo)
+            CreateTurboDisplays();
+
         Focus();
         Keyboard.Focus(this);
 
@@ -54,7 +57,8 @@ public partial class MainWindow : Window
     private void MainWindow_MouseMove(object sender, MouseEventArgs e)
     {
         if (!_mouseArmed) return;
-        var sp = PointToScreen(e.GetPosition(this));
+        var source = (Window)sender;
+        var sp = source.PointToScreen(e.GetPosition(source));
         var dx = sp.X - _mouseAnchor.X;
         var dy = sp.Y - _mouseAnchor.Y;
         if (dx * dx + dy * dy > MouseExitThresholdSq)

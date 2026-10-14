@@ -14,6 +14,22 @@ public partial class SnakeGame
     private double _turboEatPopStart = -1;
     private const double TurboEatPopDur = 0.22;
     private readonly List<TurboParticle> _turboParticles = new();
+    private readonly List<SnakeTurboCanvas> _turboViews = new();
+
+    internal void SetTurboViewport(Rect bounds) => TurboCanvas.WorldBounds = bounds;
+
+    internal SnakeTurboCanvas CreateTurboViewport(Rect bounds)
+    {
+        var canvas = new SnakeTurboCanvas
+        {
+            Host = this,
+            WorldBounds = bounds,
+            ViewportOffset = bounds.TopLeft,
+            ClipToBounds = true
+        };
+        _turboViews.Add(canvas);
+        return canvas;
+    }
 
     private sealed class TurboParticle
     {
@@ -59,7 +75,7 @@ public partial class SnakeGame
                 Y = center.Y,
                 Vx = Math.Cos(ang) * spd,
                 Vy = Math.Sin(ang) * spd,
-                Born = _turboNow,
+                Born = Now,
                 Life = _rng.NextDouble() * 0.45 + 0.55,
                 Size = _rng.Next(7, 16),
                 Color = c
@@ -72,6 +88,7 @@ public partial class SnakeGame
     {
         _turboNow = t;
         TurboCanvas.InvalidateNow();
+        foreach (var view in _turboViews) view.InvalidateNow();
     }
 
     internal void TurboRender(DrawingContext dc, SnakeTurboCanvas canvas)
@@ -91,7 +108,7 @@ public partial class SnakeGame
         var pop = 1.0;
         if (_turboEatPopStart > 0)
         {
-            var pp = (t - _turboEatPopStart) / TurboEatPopDur;
+            var pp = Math.Max(0, (t - _turboEatPopStart) / TurboEatPopDur);
             if (pp < 1) pop = 1 + 0.45 * Math.Sin(pp * Math.PI);
             else _turboEatPopStart = -1;
         }
@@ -101,32 +118,32 @@ public partial class SnakeGame
             for (int i = _segs.Count - 1; i >= 0; i--)
             {
                 var seg = _segs[i];
-                var progress = seg.MoveDuration > 0 ? Math.Min(1, (t - seg.MoveStart) / seg.MoveDuration) : 1;
-                var eased = 1 - Math.Pow(1 - progress, 3);
-                var curX = seg.Stored.X + (seg.To.X - seg.Stored.X) * eased;
-                var curY = seg.Stored.Y + (seg.To.Y - seg.Stored.Y) * eased;
-                var hue = (_hueOffset + t * 55.0 + i * 11.0) % 360.0;
+                var progress = seg.MoveDuration > 0 ? Math.Clamp((t - seg.MoveStart) / seg.MoveDuration, 0, 1) : 1;
+                var curX = seg.Stored.X + (seg.To.X - seg.Stored.X) * progress;
+                var curY = seg.Stored.Y + (seg.To.Y - seg.Stored.Y) * progress;
+                var hue = (_hueOffset + (_rainbow ? t * 55.0 : 0) + i * 11.0) % 360.0;
                 var r = radius * (i == 0 ? pop : 1);
                 var halo = r * 1.45;
-                var glow = canvas.GetGlow((int)hue);
-                dc.DrawEllipse(glow, null, new Point(curX + 4, curY + 6), halo, halo);
+                if (!canvas.WorldBounds.IsEmpty && !canvas.WorldBounds.IntersectsWith(new Rect(curX + 4 - halo, curY + 6 - halo, halo * 2, halo * 2))) continue;
+                var glow = canvas.GetGlowImage((int)hue, radius * 1.45);
+                var size = glow.Width * r / radius;
+                dc.DrawImage(glow, new Rect(curX + 4 - size / 2, curY + 6 - size / 2, size, size));
             }
         }
 
         for (int i = _segs.Count - 1; i >= 0; i--)
         {
             var seg = _segs[i];
-            var progress = seg.MoveDuration > 0 ? Math.Min(1, (t - seg.MoveStart) / seg.MoveDuration) : 1;
-            var eased = 1 - Math.Pow(1 - progress, 3);
-            var curX = seg.Stored.X + (seg.To.X - seg.Stored.X) * eased;
-            var curY = seg.Stored.Y + (seg.To.Y - seg.Stored.Y) * eased;
-            var hue = (_hueOffset + t * 55.0 + i * 11.0) % 360.0;
+            var progress = seg.MoveDuration > 0 ? Math.Clamp((t - seg.MoveStart) / seg.MoveDuration, 0, 1) : 1;
+            var curX = seg.Stored.X + (seg.To.X - seg.Stored.X) * progress;
+            var curY = seg.Stored.Y + (seg.To.Y - seg.Stored.Y) * progress;
+            var hue = (_hueOffset + (_rainbow ? t * 55.0 : 0) + i * 11.0) % 360.0;
             var r = radius * (i == 0 ? pop : 1);
+            if (!canvas.WorldBounds.IsEmpty && !canvas.WorldBounds.IntersectsWith(new Rect(curX - r - 1, curY - r - 1, r * 2 + 2, r * 2 + 2))) continue;
             var hueKey = (int)hue;
-            var fillHue = (int)((_hueOffset + t * 55.0 + i * 11.0) % 360.0);
-            var fill = canvas.GetFill(fillHue);
-            var pen = canvas.GetStrokePen(hueKey, 2.0);
-            dc.DrawEllipse(fill, pen, new Point(curX, curY), r, r);
+            var fill = canvas.GetFillImage(hueKey, radius);
+            var size = fill.Width * r / radius;
+            dc.DrawImage(fill, new Rect(curX - size / 2, curY - size / 2, size, size));
         }
     }
 
@@ -142,6 +159,7 @@ public partial class SnakeGame
             var pulse = 1.0 + 0.1 * Math.Sin(age * f.PulseFreq);
             var rot = age * f.RotSpeed * 360;
             var halfW = w * 0.5 * pulse;
+            if (!canvas.WorldBounds.IsEmpty && !canvas.WorldBounds.IntersectsWith(new Rect(pos.X - halfW * 2, pos.Y - halfW * 2, halfW * 4, halfW * 4))) continue;
             var hueKey = (int)f.Hue;
 
             if (Settings.DropShadow)
@@ -182,11 +200,14 @@ public partial class SnakeGame
         var tail = _ribbonSamples[^1];
         if (Len(head, tail) < 0.001) tail = new Point(head.X + 1, head.Y);
 
-        var geo = new PathGeometry();
-        var fig = new PathFigure { StartPoint = head, IsClosed = false, IsFilled = false };
-        for (int i = 1; i < _ribbonSamples.Count; i++)
-            fig.Segments.Add(new LineSegment(_ribbonSamples[i], true) { IsSmoothJoin = true });
-        geo.Figures.Add(fig);
+        var geo = new StreamGeometry();
+        using (var ctx = geo.Open())
+        {
+            ctx.BeginFigure(head, false, false);
+            for (int i = 1; i < _ribbonSamples.Count; i++)
+                ctx.LineTo(_ribbonSamples[i], true, true);
+        }
+        geo.Freeze();
 
         var brush = new LinearGradientBrush
         {
@@ -196,17 +217,18 @@ public partial class SnakeGame
         };
         for (int i = 0; i < 6; i++)
         {
-            var hue = (_hueOffset + t * 45.0 + i * 55.0) % 360.0;
+            var hue = (_hueOffset + (_rainbow ? t * 45.0 : 0) + i * 55.0) % 360.0;
             var c = Hsl(hue, 1.0, 0.62);
             var alpha = i == 5 ? (byte)0 : (byte)255;
             brush.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, c.R, c.G, c.B), i / 5.0));
         }
+        brush.Freeze();
 
         var strokeWidth = Cell * 0.78;
 
         if (Settings.DropShadow)
         {
-            var haloHue = (_hueOffset + t * 60.0) % 360.0;
+            var haloHue = (_hueOffset + (_rainbow ? t * 60.0 : 0)) % 360.0;
             var haloC = Hsl(haloHue, 1.0, 0.55);
             var haloBrush = new SolidColorBrush(Color.FromArgb(150, haloC.R, haloC.G, haloC.B));
             haloBrush.Freeze();
@@ -226,6 +248,7 @@ public partial class SnakeGame
             EndLineCap = PenLineCap.Round,
             LineJoin = PenLineJoin.Round
         };
+        pen.Freeze();
         dc.DrawGeometry(null, pen, geo);
     }
 
@@ -235,13 +258,14 @@ public partial class SnakeGame
         for (int i = _turboParticles.Count - 1; i >= 0; i--)
         {
             var p = _turboParticles[i];
-            var age = t - p.Born;
+            var age = Math.Max(0, t - p.Born);
             if (age >= p.Life) { _turboParticles.RemoveAt(i); continue; }
             var eased = 1 - Math.Pow(1 - age / p.Life, 2);
             var x = p.X + p.Vx * eased * 0.5;
             var y = p.Y + p.Vy * eased * 0.5 - 20 * age * age;
             var alpha = 1 - age / p.Life;
             var size = p.Size * (1 - 0.4 * age / p.Life);
+            if (!canvas.WorldBounds.IsEmpty && !canvas.WorldBounds.IntersectsWith(new Rect(x - size, y - size, size * 2, size * 2))) continue;
             dc.PushOpacity(alpha);
             var brush = new SolidColorBrush(p.Color);
             brush.Freeze();

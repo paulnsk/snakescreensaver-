@@ -251,10 +251,9 @@ public partial class SnakeGame
         for (int i = 0; i < _segs.Count; i++)
         {
             var seg = _segs[i];
-            var progress = seg.MoveDuration > 0 ? Math.Min(1, (t - seg.MoveStart) / seg.MoveDuration) : 1;
-            var eased = 1 - Math.Pow(1 - progress, 3);
-            var curX = seg.Stored.X + (seg.To.X - seg.Stored.X) * eased;
-            var curY = seg.Stored.Y + (seg.To.Y - seg.Stored.Y) * eased;
+            var progress = seg.MoveDuration > 0 ? Math.Clamp((t - seg.MoveStart) / seg.MoveDuration, 0, 1) : 1;
+            var curX = seg.Stored.X + (seg.To.X - seg.Stored.X) * progress;
+            var curY = seg.Stored.Y + (seg.To.Y - seg.Stored.Y) * progress;
             var hue = (_hueOffset + t * 55.0 + i * 11.0) % 360.0;
             var r = radius * (i == 0 ? pop : 1);
 

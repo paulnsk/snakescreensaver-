@@ -3,18 +3,40 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace SnakeScreensaver.Snake;
 
 public sealed class SnakeTurboCanvas : Canvas
 {
     internal SnakeGame? Host;
+    internal Rect WorldBounds = Rect.Empty;
+    internal Point ViewportOffset;
 
     private readonly Dictionary<int, RadialGradientBrush> _glow = new();
     private readonly Dictionary<int, RadialGradientBrush> _fill = new();
     private readonly Dictionary<int, SolidColorBrush> _strokeColors = new();
     private readonly Dictionary<int, System.Windows.Media.Pen> _pens = new();
     private readonly Dictionary<int, Geometry> _foodGeo = new();
+    private readonly Dictionary<int, BitmapSource> _glowImages = new();
+    private readonly Dictionary<int, BitmapSource> _fillImages = new();
+
+    public BitmapSource GetGlowImage(int hue, double radius) => GetImage(_glowImages, hue, radius, true);
+    public BitmapSource GetFillImage(int hue, double radius) => GetImage(_fillImages, hue, radius, false);
+
+    private BitmapSource GetImage(Dictionary<int, BitmapSource> cache, int hue, double radius, bool glow)
+    {
+        if (cache.TryGetValue(hue, out var image)) return image;
+        var size = (int)Math.Ceiling(radius * 2 + 4);
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+            dc.DrawEllipse(glow ? GetGlow(hue) : GetFill(hue), glow ? null : GetStrokePen(hue, 2), new Point(size / 2.0, size / 2.0), radius, radius);
+        var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        cache[hue] = bitmap;
+        return bitmap;
+    }
 
     public void InvalidateNow() => InvalidateVisual();
 
@@ -103,11 +125,18 @@ public sealed class SnakeTurboCanvas : Canvas
         _strokeColors.Clear();
         _pens.Clear();
         _foodGeo.Clear();
+        _glowImages.Clear();
+        _fillImages.Clear();
     }
 
     protected override void OnRender(DrawingContext dc)
     {
         base.OnRender(dc);
-        if (Host != null) Host.TurboRender(dc, this);
+        if (Host == null) return;
+        dc.PushTransform(new TranslateTransform(-ViewportOffset.X, -ViewportOffset.Y));
+        if (!WorldBounds.IsEmpty) dc.PushClip(new RectangleGeometry(WorldBounds));
+        Host.TurboRender(dc, this);
+        if (!WorldBounds.IsEmpty) dc.Pop();
+        dc.Pop();
     }
 }

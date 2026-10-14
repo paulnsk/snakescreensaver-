@@ -130,9 +130,10 @@ public partial class SnakeGame : UserControl
         {
             if (_mode == Settings.RenderMode.Balls)
             {
-                if (t - _lastStepTime >= _intervalSec)
+                _lastStepTime = Math.Max(_lastStepTime, t - 0.25);
+                while (!_dead && t - _lastStepTime >= _intervalSec)
                 {
-                    _lastStepTime = t;
+                    _lastStepTime += _intervalSec;
                     StepBalls();
                 }
             }
@@ -147,9 +148,10 @@ public partial class SnakeGame : UserControl
         {
             if (_mode == Settings.RenderMode.Balls)
             {
-                if (t - _lastStepTime >= _intervalSec)
+                _lastStepTime = Math.Max(_lastStepTime, t - 0.25);
+                while (!_dead && t - _lastStepTime >= _intervalSec)
                 {
-                    _lastStepTime = t;
+                    _lastStepTime += _intervalSec;
                     StepBalls();
                 }
             }
@@ -369,7 +371,7 @@ public partial class SnakeGame : UserControl
     private void SyncSegs()
     {
         var dur = TimeSpan.FromSeconds(_intervalSec);
-        var now = Now;
+        var now = _isSkia || _isTurbo ? _lastStepTime : Now;
         for (int i = 0; i < _segs.Count; i++)
         {
             if (i >= _snake.Count) break;
@@ -391,7 +393,9 @@ public partial class SnakeGame : UserControl
 
     private void AddSegVisual()
     {
-        var origin = _segs.Count > 0 ? _segs[0].Stored : CellCenter(_snake[0]);
+        var origin = _segs.Count > 0
+            ? (_isSkia || _isTurbo ? _segs[0].To : _segs[0].Stored)
+            : CellCenter(_snake[0]);
         var seg = _isSkia ? SkiaCreateSeg() : (_isTurbo ? TurboCreateSeg() : CreateSeg());
         if (!_isSkia && !_isTurbo)
         {
