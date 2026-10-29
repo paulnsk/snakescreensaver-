@@ -78,6 +78,11 @@
                                   IsEnabled="{Binding IsChecked, ElementName=RendererWpfTurbo}"
                                   Checked="LivingSnake_Changed" Unchecked="LivingSnake_Changed"/>
 
+                        <TextBlock Text="✨ MAGIC POOP" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
+                        <CheckBox x:Name="MagicPoopChk" Content="sparkling rainbow treats from the tail" Style="{StaticResource SettingsCheckbox}"
+                                  IsEnabled="{Binding IsChecked, ElementName=RendererWpfTurbo}"
+                                  Checked="MagicPoop_Changed" Unchecked="MagicPoop_Changed"/>
+
                         <TextBlock Text="⏰ IDLE LAUNCH (minutes)" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
                         <Slider x:Name="IdleSlider" Minimum="0" Maximum="60" TickFrequency="1" IsSnapToTickEnabled="True"
                                 Style="{StaticResource SettingsSlider}" AutoToolTipPlacement="TopLeft"

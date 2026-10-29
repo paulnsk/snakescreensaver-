@@ -97,7 +97,7 @@ public partial class SnakeGame
             var age = meal.Age - SwallowTime;
             if (age >= DigestTime) { _meals.RemoveAt(i); continue; }
             var progress = Math.Clamp(age / DigestTime, 0, 1);
-            meal.Center = Cell * (1.1 + 7 * (1 - Math.Exp(-Math.Max(0, age) * 0.85)));
+            meal.Center = TurboDigestionDistance(age);
             meal.Amplitude = Math.Clamp(age / 0.25, 0, 1) * Math.Pow(1 - progress, 1.4)
                 * (0.55 + Math.Min(0.35, meal.Food.Growth * 0.07));
         }

@@ -46,6 +46,7 @@ public partial class SnakeGame
         _turboParticles.Clear();
         _turboEatPopStart = -1;
         TurboResetFeeding();
+        TurboResetPoop();
     }
 
     private Seg TurboCreateSeg() => new Seg { Half = Cell * 0.46 };
@@ -56,6 +57,7 @@ public partial class SnakeGame
     {
         _foods.Remove(f);
         var pos = CellCenter(f.Cell);
+        if (Settings.MagicPoop) TurboQueuePoop(f);
         if (Settings.LivingSnake) TurboSwallow(f);
         else TurboBurst(pos, f.Hue, 28);
         _hueOffset = (_hueOffset + 33.0) % 360.0;
@@ -90,6 +92,7 @@ public partial class SnakeGame
     {
         _turboNow = t;
         TurboUpdateFeeding(t);
+        TurboUpdatePoop(t);
         TurboCanvas.InvalidateNow();
         foreach (var view in _turboViews) view.InvalidateNow();
     }
@@ -97,9 +100,11 @@ public partial class SnakeGame
     internal void TurboRender(DrawingContext dc, SnakeTurboCanvas canvas)
     {
         var t = _turboNow;
+        TurboDrawPoop(dc, canvas, t);
         TurboDrawFoods(dc, canvas, t);
         if (_mode == Settings.RenderMode.Balls) TurboDrawBalls(dc, canvas, t);
         else TurboDrawRibbon(dc, canvas, t);
+        TurboDrawTailPortal(dc, canvas, t);
         if (Settings.LivingSnake)
         {
             TurboDrawSwallows(dc, canvas, t);

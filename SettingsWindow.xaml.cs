@@ -19,6 +19,7 @@ public partial class SettingsWindow : Window
         RainbowChk.IsChecked = Settings.Rainbow;
         DropShadowChk.IsChecked = Settings.DropShadow;
         LivingSnakeChk.IsChecked = Settings.LivingSnake;
+        MagicPoopChk.IsChecked = Settings.MagicPoop;
         IdleSlider.Value = Settings.IdleMinutes;
         StartupChk.IsChecked = Settings.RunAtStartup;
     }
@@ -55,6 +56,11 @@ public partial class SettingsWindow : Window
     private void LivingSnake_Changed(object sender, RoutedEventArgs e)
     {
         Settings.LivingSnake = LivingSnakeChk.IsChecked == true;
+    }
+
+    private void MagicPoop_Changed(object sender, RoutedEventArgs e)
+    {
+        Settings.MagicPoop = MagicPoopChk.IsChecked == true;
     }
 
     private void Idle_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
