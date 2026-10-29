@@ -7,12 +7,14 @@ namespace SnakeScreensaver.Snake;
 
 public partial class SnakeGame
 {
-    private const double SwallowTime = 0.22;
+    private const double SwallowTime = 0.46;
     private const double DigestTime = 4.0;
     private readonly List<Meal> _meals = new();
     private double _faceAngle;
     private double _faceLastTime;
-    private double _lastBite = -100;
+    private double _jawAngle;
+    private double _headRadius;
+    private Point _faceGaze;
 
     private sealed class Meal
     {
@@ -26,13 +28,14 @@ public partial class SnakeGame
         _meals.Clear();
         _faceAngle = 0;
         _faceLastTime = Now;
-        _lastBite = -100;
+        _jawAngle = 0;
+        _headRadius = Cell * 0.78;
+        _faceGaze = new Point(1, 0);
     }
 
     private void TurboSwallow(Food food)
     {
         var born = _mode == Settings.RenderMode.Balls ? _lastStepTime : Now;
-        _lastBite = born;
         _meals.Add(new Meal
         {
             Food = food,
@@ -98,6 +101,39 @@ public partial class SnakeGame
             meal.Amplitude = Math.Clamp(age / 0.25, 0, 1) * Math.Pow(1 - progress, 1.4)
                 * (0.55 + Math.Min(0.35, meal.Food.Growth * 0.07));
         }
+        var head = TurboHeadPosition(t);
+        var cos = Math.Cos(_faceAngle);
+        var sin = Math.Sin(_faceAngle);
+        var nearest = double.MaxValue;
+        var anticipation = 0.0;
+        _faceGaze = new Point(cos, sin);
+        foreach (var food in _foods)
+        {
+            var pos = CellCenter(food.Cell);
+            var distance = Len(head, pos);
+            if (distance >= nearest) continue;
+            nearest = distance;
+            _faceGaze = new Point(pos.X - head.X, pos.Y - head.Y);
+        }
+        if (_faceGaze.X * cos + _faceGaze.Y * sin > 0)
+            anticipation = Math.Clamp(1 - (nearest - Cell * 0.7) / (Cell * 1.8), 0, 1);
+        var phase = t * 3.1 % 1;
+        var chomp = phase < 0.1 || phase >= 0.94 ? 0
+            : phase < 0.7 ? Math.Sin((phase - 0.1) / 0.6 * Math.PI / 2)
+            : Math.Pow((0.94 - phase) / 0.24, 2);
+        var opening = chomp * (1 - anticipation) + anticipation;
+        var swell = anticipation * 0.18;
+        foreach (var meal in _meals)
+        {
+            var progress = meal.Age / SwallowTime;
+            if (progress >= 1.5) continue;
+            var gape = progress < 0.65 ? 1 : Math.Clamp((1 - progress) / 0.35, 0, 1);
+            opening = Math.Max(opening, gape);
+            swell = Math.Max(swell, (0.25 + meal.Food.Growth * 0.07)
+                * (progress < 0.65 ? 1 : Math.Max(0, 1 - (progress - 0.65) / 0.85)));
+        }
+        _jawAngle = opening * 52 * Math.PI / 180;
+        _headRadius = Cell * 0.78 * (1 + swell);
     }
 
     private double TurboDigestScale(double distance, ref double hue)
@@ -124,22 +160,26 @@ public partial class SnakeGame
     private void TurboDrawSwallows(DrawingContext dc, SnakeTurboCanvas canvas, double t)
     {
         var head = TurboHeadPosition(t);
-        var mouth = new Point(head.X + Math.Cos(_faceAngle) * Cell * 0.36,
-                              head.Y + Math.Sin(_faceAngle) * Cell * 0.36);
+        var cos = Math.Cos(_faceAngle);
+        var sin = Math.Sin(_faceAngle);
         foreach (var meal in _meals)
         {
             if (meal.Age >= SwallowTime) continue;
             var progress = Math.Clamp(meal.Age / SwallowTime, 0, 1);
-            var pull = 1 - Math.Pow(1 - progress, 3);
-            var pos = new Point(meal.Origin.X + (mouth.X - meal.Origin.X) * pull,
-                                meal.Origin.Y + (mouth.Y - meal.Origin.Y) * pull);
-            var size = Cell * 0.78 * (1 - progress * 0.95);
+            var pull = progress * progress * (3 - 2 * progress);
+            var dx = meal.Origin.X - head.X;
+            var dy = meal.Origin.Y - head.Y;
+            var forward = Math.Max(_headRadius * 1.05, dx * cos + dy * sin);
+            var side = (-dx * sin + dy * cos) * (1 - pull);
+            var along = forward * (1 - pull) - _headRadius * 0.35 * pull;
+            var pos = new Point(head.X + cos * along - sin * side,
+                                head.Y + sin * along + cos * side);
+            var size = Cell * 0.78 * (1 - Math.Max(0, progress - 0.65) * 1.4);
             if (!canvas.WorldBounds.IsEmpty && !canvas.WorldBounds.IntersectsWith(new Rect(pos.X - size, pos.Y - size, size * 2, size * 2))) continue;
-            dc.PushOpacity(1 - progress * progress);
             if (Settings.DropShadow)
                 dc.DrawEllipse(canvas.GetGlow((int)meal.Food.Hue), null, pos, size * 0.8, size * 0.8);
             dc.PushTransform(new TranslateTransform(pos.X, pos.Y));
-            dc.PushTransform(new RotateTransform(progress * 240));
+            dc.PushTransform(new RotateTransform(t * meal.Food.RotSpeed * 360 + progress * 90));
             if (meal.Food.Kind == 0)
                 dc.DrawEllipse(canvas.GetFill((int)meal.Food.Hue), canvas.GetStrokePen((int)meal.Food.Hue, 1.8), new Point(), size / 2, size / 2);
             else
@@ -152,36 +192,19 @@ public partial class SnakeGame
             }
             dc.Pop();
             dc.Pop();
-            dc.Pop();
         }
     }
 
     private void TurboDrawFace(DrawingContext dc, SnakeTurboCanvas canvas, double t)
     {
         var head = TurboHeadPosition(t);
-        var r = Cell * 0.57;
+        var r = _headRadius;
         if (!canvas.WorldBounds.IsEmpty && !canvas.WorldBounds.IntersectsWith(new Rect(head.X - r * 2, head.Y - r * 2, r * 4, r * 4))) return;
         var cos = Math.Cos(_faceAngle);
         var sin = Math.Sin(_faceAngle);
-        var gaze = new Point(r, 0);
-        var nearest = double.MaxValue;
-        var anticipation = 0.0;
-        foreach (var food in _foods)
-        {
-            var pos = CellCenter(food.Cell);
-            var distance = Len(head, pos);
-            if (distance >= nearest) continue;
-            nearest = distance;
-            gaze = new Point(pos.X - head.X, pos.Y - head.Y);
-        }
-        if (nearest < Cell * 3 && gaze.X * cos + gaze.Y * sin > 0)
-            anticipation = Math.Clamp(1 - nearest / (Cell * 3), 0, 1);
-        var chew = Math.Max(0, t - _lastBite);
-        var opening = 0.12 + anticipation * 0.85;
-        if (chew < 0.32) opening = 0.12 + 0.9 * Math.Pow(1 - chew / 0.32, 1.5);
-        var angle = (6 + opening * 43) * Math.PI / 180;
+        var gaze = _faceGaze;
+        var angle = Math.Max(0.001, _jawAngle);
         var hue = (int)((_hueOffset + (_rainbow ? t * 55 : 0)) % 360);
-        r *= 1 + (chew < 0.5 ? Math.Sin(chew / 0.5 * Math.PI) * 0.07 : 0);
 
         if (Settings.DropShadow)
         {
@@ -198,34 +221,57 @@ public partial class SnakeGame
         var face = new StreamGeometry();
         using (var ctx = face.Open())
         {
-            ctx.BeginFigure(new Point(-r * 0.16, 0), true, true);
+            ctx.BeginFigure(new Point(), true, true);
             ctx.LineTo(upper, true, false);
             ctx.ArcTo(lower, new System.Windows.Size(r, r), 0, true, SweepDirection.Counterclockwise, true, true);
         }
         face.Freeze();
         dc.DrawGeometry(canvas.GetFill(hue), canvas.GetStrokePen(hue, 1.8), face);
 
-        if (opening > 0.35)
-            dc.DrawEllipse(System.Windows.Media.Brushes.HotPink, null, new Point(r * 0.45, r * 0.12), r * 0.22, r * 0.1);
-        var eye = new Point(-r * 0.05, -r * 0.53);
-        var ink = new System.Windows.Media.Pen(System.Windows.Media.Brushes.MidnightBlue, 1.3);
+        var ink = new System.Windows.Media.Pen(System.Windows.Media.Brushes.MidnightBlue, 2.1)
+        {
+            StartLineCap = PenLineCap.Round,
+            EndLineCap = PenLineCap.Round,
+            LineJoin = PenLineJoin.Round
+        };
         ink.Freeze();
         var shine = new System.Windows.Media.Pen(System.Windows.Media.Brushes.White, 1.7);
         shine.Freeze();
-        if (chew > 0.28 && chew < 0.58)
-            dc.DrawLine(ink, new Point(eye.X - r * 0.23, eye.Y + r * 0.07), new Point(eye.X + r * 0.23, eye.Y - r * 0.07));
-        else
+        for (int jaw = -1; angle > 0.12 && jaw <= 1; jaw += 2)
         {
-            dc.DrawEllipse(System.Windows.Media.Brushes.White, ink, eye, r * 0.24, r * 0.28);
-            var length = Math.Max(1, Math.Sqrt(gaze.X * gaze.X + gaze.Y * gaze.Y));
-            var pupil = new Point(eye.X + (gaze.X * cos + gaze.Y * sin) / length * r * 0.1,
-                eye.Y + (-gaze.X * sin + gaze.Y * cos) / length * r * 0.1 * flip);
-            dc.DrawEllipse(System.Windows.Media.Brushes.MidnightBlue, null, pupil, r * 0.105, r * 0.14);
-            dc.DrawEllipse(System.Windows.Media.Brushes.White, null, new Point(pupil.X - r * 0.03, pupil.Y - r * 0.05), r * 0.035, r * 0.04);
+            dc.PushTransform(new RotateTransform(jaw * angle * 180 / Math.PI));
+            var teeth = new StreamGeometry();
+            using (var ctx = teeth.Open())
+            {
+                ctx.BeginFigure(new Point(r * 0.55, 0), true, true);
+                ctx.LineTo(new Point(r * 0.76, 0), true, false);
+                ctx.LineTo(new Point(r * 0.64, -jaw * Math.Min(r * 0.22, r * Math.Sin(angle) * 0.5)), true, false);
+            }
+            teeth.Freeze();
+            dc.DrawGeometry(System.Windows.Media.Brushes.Ivory, ink, teeth);
+            dc.Pop();
         }
-        dc.DrawLine(ink, new Point(-r * 0.27, -r * 0.86), new Point(r * 0.18, -r * (0.83 + anticipation * 0.09)));
+        var eye = new Point(-r * 0.16, -r * 0.53);
+        dc.DrawEllipse(System.Windows.Media.Brushes.Ivory, ink, eye, r * 0.3, r * 0.25);
+        var length = Math.Max(1, Math.Sqrt(gaze.X * gaze.X + gaze.Y * gaze.Y));
+        var pupil = new Point(eye.X + (gaze.X * cos + gaze.Y * sin) / length * r * 0.12,
+            eye.Y + (-gaze.X * sin + gaze.Y * cos) / length * r * 0.07 * flip);
+        dc.DrawEllipse(System.Windows.Media.Brushes.MidnightBlue, null, pupil, r * 0.095, r * 0.16);
+        dc.DrawEllipse(System.Windows.Media.Brushes.White, null, new Point(pupil.X - r * 0.025, pupil.Y - r * 0.06), r * 0.03, r * 0.04);
+        var lid = new StreamGeometry();
+        using (var ctx = lid.Open())
+        {
+            ctx.BeginFigure(new Point(-r * 0.49, -r * 0.87), true, true);
+            ctx.LineTo(new Point(r * 0.18, -r * 0.87), true, false);
+            ctx.LineTo(new Point(r * 0.18, -r * 0.43), true, false);
+            ctx.LineTo(new Point(-r * 0.49, -r * 0.72), true, false);
+        }
+        lid.Freeze();
+        dc.DrawGeometry(canvas.GetFill(hue), null, lid);
+        dc.DrawLine(ink, new Point(-r * 0.49, -r * 0.72), new Point(r * 0.18, -r * 0.43));
+        dc.DrawLine(ink, new Point(-r * 0.62, r * 0.14), new Point(-r * 0.42, r * 0.29));
+        dc.DrawLine(ink, new Point(-r * 0.42, r * 0.29), new Point(-r * 0.17, r * 0.17));
         dc.DrawLine(shine, new Point(-r * 0.65, -r * 0.46), new Point(-r * 0.46, -r * 0.69));
-        dc.DrawEllipse(System.Windows.Media.Brushes.DeepPink, null, new Point(-r * 0.12, r * 0.42), r * 0.15, r * 0.09);
         dc.Pop();
         dc.Pop();
         dc.Pop();
