@@ -18,7 +18,7 @@ public partial class SnakeGame : UserControl
     private int _cols, _rows;
     private double _originX, _originY;
 
-    private readonly Random _rng = new(42);
+    private readonly Random _rng = new();
     private readonly Stopwatch _sw = new();
     private bool _started;
     private bool _dead;
