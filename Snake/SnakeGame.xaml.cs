@@ -364,7 +364,6 @@ public partial class SnakeGame : UserControl
             _snake.RemoveAt(_snake.Count - 1);
         }
 
-        _intervalSec = Math.Max(0.045, 0.135 - _snake.Count * 0.0025);
         SyncSegs();
     }
 
@@ -462,9 +461,6 @@ public partial class SnakeGame : UserControl
             if (_dead) return;
         }
         _ribbonHeadCell = nc;
-
-        var lenCells = Math.Max(1, _ribbonTargetLenPx / Cell);
-        _ribbonSpeed = 230 + Math.Min(120, lenCells * 4);
 
         TrimRibbonTo(_ribbonTargetLenPx);
         DrawRibbonGeometry();
