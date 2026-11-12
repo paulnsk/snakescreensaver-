@@ -30,8 +30,7 @@ public partial class MainWindow : Window
 
         HideFromAltTab();
 
-        if (Settings.Render == Settings.Renderer.WpfTurbo)
-            CreateTurboDisplays();
+        CreateTurboDisplays();
 
         Focus();
         Keyboard.Focus(this);

@@ -37,8 +37,6 @@ public partial class SnakeGame
         public Color Color;
     }
 
-    private void TurboInit() { }
-
     private void TurboResize() => TurboCanvas.InvalidateNow();
 
     private void TurboReset()

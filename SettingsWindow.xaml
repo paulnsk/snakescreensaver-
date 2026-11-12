@@ -43,14 +43,7 @@
 
                 <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource SettingsCard}">
                     <StackPanel>
-                        <TextBlock Text="RENDERER" Style="{StaticResource SettingsLabel}"/>
-                        <WrapPanel>
-                            <RadioButton x:Name="RendererWpf" Content="WPF (legacy)" GroupName="rnd" Style="{StaticResource TrayRadio}" Checked="Renderer_Checked"/>
-                            <RadioButton x:Name="RendererSkia" Content="Skia" GroupName="rnd" Style="{StaticResource TrayRadio}" Checked="Renderer_Checked"/>
-                            <RadioButton x:Name="RendererWpfTurbo" Content="WPF TURBO" GroupName="rnd" Style="{StaticResource TrayRadio}" Checked="Renderer_Checked"/>
-                        </WrapPanel>
-
-                        <TextBlock Text="RENDER MODE" Style="{StaticResource SettingsLabel}" Margin="4,14,0,4"/>
+                        <TextBlock Text="RENDER MODE" Style="{StaticResource SettingsLabel}"/>
                         <WrapPanel>
                             <RadioButton x:Name="RenderBalls" Content="⚽ Balls" GroupName="rm" Style="{StaticResource TrayRadio}" Checked="Render_Checked"/>
                             <RadioButton x:Name="RenderRibbon" Content="🌀 Ribbon" GroupName="rm" Style="{StaticResource TrayRadio}" Checked="Render_Checked"/>
@@ -84,13 +77,11 @@
                         <CheckBox x:Name="DropShadowChk" Content="glow shadow under snake (slower on weak GPU)" Style="{StaticResource SettingsCheckbox}" Checked="DropShadow_Changed" Unchecked="DropShadow_Changed"/>
 
                         <TextBlock Text="HUNGRY SNAKE" Style="{StaticResource SettingsLabel}" Margin="4,12,0,4"/>
-                        <CheckBox x:Name="LivingSnakeChk" Content="angry face, bites &amp; digestion (Turbo)" Style="{StaticResource SettingsCheckbox}"
-                                  IsEnabled="{Binding IsChecked, ElementName=RendererWpfTurbo}"
+                        <CheckBox x:Name="LivingSnakeChk" Content="angry face, bites &amp; digestion" Style="{StaticResource SettingsCheckbox}"
                                   Checked="LivingSnake_Changed" Unchecked="LivingSnake_Changed"/>
 
                         <TextBlock Text="MAGIC POOP" Style="{StaticResource SettingsLabel}" Margin="4,12,0,4"/>
-                        <CheckBox x:Name="MagicPoopChk" Content="sparkling rainbow treats from the tail (Turbo)" Style="{StaticResource SettingsCheckbox}"
-                                  IsEnabled="{Binding IsChecked, ElementName=RendererWpfTurbo}"
+                        <CheckBox x:Name="MagicPoopChk" Content="sparkling rainbow treats from the tail" Style="{StaticResource SettingsCheckbox}"
                                   Checked="MagicPoop_Changed" Unchecked="MagicPoop_Changed"/>
 
                         <TextBlock Text="RUN ON STARTUP" Style="{StaticResource SettingsLabel}" Margin="4,12,0,4"/>

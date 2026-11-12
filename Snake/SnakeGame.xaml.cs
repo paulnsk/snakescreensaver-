@@ -5,9 +5,6 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Effects;
-using System.Windows.Shapes;
-using Path = System.Windows.Shapes.Path;
 
 namespace SnakeScreensaver.Snake;
 
@@ -25,9 +22,6 @@ public partial class SnakeGame : UserControl
     private double _deadAt;
     private double Now => _sw.Elapsed.TotalSeconds;
 
-    private bool _isSkia;
-    private bool _isTurbo;
-
     private Settings.RenderMode _mode = Settings.RenderMode.Balls;
     private bool _rainbow = true;
     private double _hueOffset = 0;
@@ -40,10 +34,6 @@ public partial class SnakeGame : UserControl
     private double _intervalSec = 0.13;
     private double _lastStepTime;
 
-    private Path? _ribbonPath;
-    private LinearGradientBrush? _ribbonStroke;
-    private LinearGradientBrush? _ribbonAlpha;
-    private DropShadowEffect? _ribbonEffect;
     private readonly List<Point> _ribbonSamples = new();
     private (int dx, int dy) _ribbonDir = (1, 0);
     private (int X, int Y) _ribbonHeadCell;
@@ -58,25 +48,7 @@ public partial class SnakeGame : UserControl
         InitializeComponent();
         _mode = Settings.Mode;
         _rainbow = Settings.Rainbow;
-        _isSkia = Settings.Render == Settings.Renderer.Skia;
-        _isTurbo = Settings.Render == Settings.Renderer.WpfTurbo;
-        if (_isSkia)
-        {
-            Field.Visibility = Visibility.Collapsed;
-            SkiaImage.Visibility = Visibility.Visible;
-        }
-        else if (_isTurbo)
-        {
-            Field.Visibility = Visibility.Collapsed;
-            SkiaImage.Visibility = Visibility.Collapsed;
-            TurboCanvas.Visibility = Visibility.Visible;
-            TurboCanvas.Host = this;
-        }
-        else
-        {
-            Field.UseLayoutRounding = true;
-            Field.SnapsToDevicePixels = true;
-        }
+        TurboCanvas.Host = this;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         SizeChanged += (_, _) => InitFromSize(true);
@@ -84,8 +56,6 @@ public partial class SnakeGame : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_isSkia) SkiaInit();
-        else if (_isTurbo) TurboInit();
         Start();
         _sw.Start();
         CompositionTarget.Rendering += OnRender;
@@ -111,8 +81,7 @@ public partial class SnakeGame : UserControl
         {
             _cols = newCols; _rows = newRows;
         }
-        if (_isSkia) SkiaResize();
-        else if (_isTurbo) TurboResize();
+        TurboResize();
     }
 
     private void OnRender(object? sender, EventArgs e)
@@ -121,64 +90,24 @@ public partial class SnakeGame : UserControl
         if (_dead)
         {
             if (t - _deadAt >= 1.7) Start();
-            else if (_isSkia) SkiaRedraw(t);
-            else if (_isTurbo) TurboRedraw(t);
+            else TurboRedraw(t);
             return;
         }
         if (_cols == 0) return;
-        if (_isSkia)
-        {
-            if (_mode == Settings.RenderMode.Balls)
-            {
-                _lastStepTime = Math.Max(_lastStepTime, t - 0.25);
-                while (!_dead && t - _lastStepTime >= _intervalSec)
-                {
-                    _lastStepTime += _intervalSec;
-                    StepBalls();
-                }
-            }
-            else
-            {
-                UpdateRibbon(t, _rainbow);
-            }
-            SkiaRedraw(t);
-            return;
-        }
-        if (_isTurbo)
-        {
-            if (_mode == Settings.RenderMode.Balls)
-            {
-                _lastStepTime = Math.Max(_lastStepTime, t - 0.25);
-                while (!_dead && t - _lastStepTime >= _intervalSec)
-                {
-                    _lastStepTime += _intervalSec;
-                    StepBalls();
-                }
-            }
-            else
-            {
-                UpdateRibbon(t, _rainbow);
-            }
-            TurboRedraw(t);
-            return;
-        }
         if (_mode == Settings.RenderMode.Balls)
         {
-            if (t - _lastStepTime >= _intervalSec)
+            _lastStepTime = Math.Max(_lastStepTime, t - 0.25);
+            while (!_dead && t - _lastStepTime >= _intervalSec)
             {
-                _lastStepTime = t;
+                _lastStepTime += _intervalSec;
                 StepBalls();
-                if (_rainbow) UpdateBallsColors(t);
-            }
-            else if (_rainbow)
-            {
-                UpdateBallsColors(t);
             }
         }
         else
         {
-            UpdateRibbon(t, _rainbow);
+            UpdateRibbon(t);
         }
+        TurboRedraw(t);
     }
 
     private void Start()
@@ -186,7 +115,6 @@ public partial class SnakeGame : UserControl
         InitFromSize();
         _hueOffset = _rng.NextDouble() * 360.0;
         _started = true;
-        if (!_isSkia) Field.Children.Clear();
         _segs.Clear();
         _foods.Clear();
         _snake.Clear();
@@ -195,13 +123,10 @@ public partial class SnakeGame : UserControl
         _ribbonSamples.Clear();
         _ribbonReady = false;
 
-        if (_isSkia) SkiaReset();
-        else if (_isTurbo) TurboReset();
+        TurboReset();
 
         if (_mode == Settings.RenderMode.Balls) StartBalls();
         else StartRibbon();
-
-        if (!_isSkia && _mode == Settings.RenderMode.Balls) UpdateBallsColors(0);
 
         for (int i = 0; i < 5; i++) SpawnFood();
 
@@ -212,7 +137,6 @@ public partial class SnakeGame : UserControl
 
     private void StartBalls()
     {
-        EnsureRibbonPath(false);
         var cx = _cols / 2;
         var cy = _rows / 2;
         for (int i = 3; i >= 0; i--)
@@ -220,30 +144,18 @@ public partial class SnakeGame : UserControl
             var cell = (X: cx - i, Y: cy);
             _snake.Add(cell);
             var pos = CellCenter(cell);
-            if (_isSkia || _isTurbo)
-            {
-                var seg = _isSkia ? SkiaCreateSeg() : TurboCreateSeg();
-                seg.Stored = pos;
-                seg.To = pos;
-                seg.MoveStart = Now;
-                seg.MoveDuration = _intervalSec;
-                _segs.Add(seg);
-            }
-            else
-            {
-                var seg = CreateSeg();
-                Canvas.SetLeft(seg.Ell, pos.X - seg.Ell.Width / 2);
-                Canvas.SetTop(seg.Ell, pos.Y - seg.Ell.Height / 2);
-                seg.Stored = pos;
-                _segs.Add(seg);
-            }
+            var seg = TurboCreateSeg();
+            seg.Stored = pos;
+            seg.To = pos;
+            seg.MoveStart = Now;
+            seg.MoveDuration = _intervalSec;
+            _segs.Add(seg);
         }
         _dirX = 1; _dirY = 0;
     }
 
     private void StartRibbon()
     {
-        EnsureRibbonPath(true);
         _ribbonTargetLenPx = 4 * Cell;
         _ribbonSpeed = 230;
         _ribbonDir = (1, 0);
@@ -260,55 +172,6 @@ public partial class SnakeGame : UserControl
         _ribbonHeadCell = (cx, cy);
         _ribbonReady = true;
         _ribbonLastT = Now;
-        DrawRibbonColor(0);
-    }
-
-    private void EnsureRibbonPath(bool on)
-    {
-        if (_isSkia || _isTurbo) return;
-        if (on && _ribbonPath == null)
-        {
-            _ribbonPath = new Path
-            {
-                StrokeThickness = Cell * 0.78,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round,
-                StrokeLineJoin = PenLineJoin.Round,
-                UseLayoutRounding = true,
-                SnapsToDevicePixels = true
-            };
-            _ribbonStroke = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute };
-            for (int i = 0; i < 6; i++)
-                _ribbonStroke.GradientStops.Add(new GradientStop(Hsl(_hueOffset + i * 55.0, 1.0, 0.62), i / 5.0));
-            _ribbonPath.Stroke = _ribbonStroke;
-
-            _ribbonAlpha = new LinearGradientBrush { MappingMode = BrushMappingMode.Absolute };
-            _ribbonAlpha.GradientStops.Add(new GradientStop(Color.FromRgb(0, 0, 0), 0));
-            _ribbonAlpha.GradientStops.Add(new GradientStop(Color.FromRgb(0, 0, 0), 0.82));
-            _ribbonAlpha.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 0, 0), 1));
-            _ribbonPath.OpacityMask = _ribbonAlpha;
-
-            _ribbonEffect = new DropShadowEffect
-            {
-                Color = Hsl(_hueOffset, 1.0, 0.55),
-                BlurRadius = 30,
-                ShadowDepth = 6,
-                Direction = 320,
-                Opacity = 0.95,
-                RenderingBias = RenderingBias.Performance
-            };
-            if (Settings.DropShadow) _ribbonPath.Effect = _ribbonEffect;
-
-            Field.Children.Add(_ribbonPath);
-        }
-        if (!on && _ribbonPath != null)
-        {
-            Field.Children.Remove(_ribbonPath);
-            _ribbonPath = null;
-            _ribbonStroke = null;
-            _ribbonAlpha = null;
-            _ribbonEffect = null;
-        }
     }
 
     private Point CellCenter((int X, int Y) cell)
@@ -349,7 +212,7 @@ public partial class SnakeGame : UserControl
         {
             var f = _foods[foodIdx];
             _pendingGrowth += f.Growth;
-            EatFoodShared(f);
+            TurboEatFood(f);
         }
 
         _snake.Insert(0, nh);
@@ -369,38 +232,21 @@ public partial class SnakeGame : UserControl
 
     private void SyncSegs()
     {
-        var dur = TimeSpan.FromSeconds(_intervalSec);
-        var now = _isSkia || _isTurbo ? _lastStepTime : Now;
         for (int i = 0; i < _segs.Count; i++)
         {
             if (i >= _snake.Count) break;
             var seg = _segs[i];
-            var target = CellCenter(_snake[i]);
-            if (_isSkia || _isTurbo)
-            {
-                seg.Stored = seg.To;
-                seg.To = target;
-                seg.MoveStart = now;
-                seg.MoveDuration = _intervalSec;
-            }
-            else
-            {
-                seg.AnimateTo(target, dur);
-            }
+            seg.Stored = seg.To;
+            seg.To = CellCenter(_snake[i]);
+            seg.MoveStart = _lastStepTime;
+            seg.MoveDuration = _intervalSec;
         }
     }
 
     private void AddSegVisual()
     {
-        var origin = _segs.Count > 0
-            ? (_isSkia || _isTurbo ? _segs[0].To : _segs[0].Stored)
-            : CellCenter(_snake[0]);
-        var seg = _isSkia ? SkiaCreateSeg() : (_isTurbo ? TurboCreateSeg() : CreateSeg());
-        if (!_isSkia && !_isTurbo)
-        {
-            Canvas.SetLeft(seg.Ell, origin.X - seg.Ell.Width / 2);
-            Canvas.SetTop(seg.Ell, origin.Y - seg.Ell.Height / 2);
-        }
+        var origin = _segs.Count > 0 ? _segs[0].To : CellCenter(_snake[0]);
+        var seg = TurboCreateSeg();
         seg.Stored = origin;
         seg.To = origin;
         seg.MoveStart = Now;
@@ -430,21 +276,7 @@ public partial class SnakeGame : UserControl
         return (_dirX, _dirY);
     }
 
-    private void UpdateBallsColors(double t)
-    {
-        if (_isSkia || _isTurbo) return;
-        for (int i = 0; i < _segs.Count; i++)
-        {
-            var s = _segs[i];
-            var hue = (_hueOffset + t * 55.0 + i * 11.0) % 360.0;
-            s.Fill.GradientStops[0].Color = Hsl(hue, 0.85, 0.82);
-            s.Fill.GradientStops[1].Color = Hsl(hue, 1.0, 0.5);
-            s.Stroke.Color = Hsl((hue + 320) % 360.0, 1.0, 0.6);
-            if (s.Shadow != null) s.Shadow.Color = Hsl(hue, 1.0, 0.55);
-        }
-    }
-
-    private void UpdateRibbon(double t, bool rainbow)
+    private void UpdateRibbon(double t)
     {
         if (!_ribbonReady || _ribbonSamples.Count < 2) return;
         var dt = Math.Max(0.0001, Math.Min(0.05, t - _ribbonLastT));
@@ -463,8 +295,6 @@ public partial class SnakeGame : UserControl
         _ribbonHeadCell = nc;
 
         TrimRibbonTo(_ribbonTargetLenPx);
-        DrawRibbonGeometry();
-        if (rainbow) DrawRibbonColor(t);
     }
 
     private void OnRibbonCellCrossed((int X, int Y) nc)
@@ -479,7 +309,7 @@ public partial class SnakeGame : UserControl
         {
             var f = _foods[foodIdx];
             _ribbonTargetLenPx += f.Growth * Cell;
-            EatFoodShared(f);
+            TurboEatFood(f);
             SpawnFood();
         }
 
@@ -544,58 +374,14 @@ public partial class SnakeGame : UserControl
         while (_ribbonSamples.Count > cutIndex + 1) _ribbonSamples.RemoveAt(_ribbonSamples.Count - 1);
     }
 
-    private void DrawRibbonGeometry()
-    {
-        if (_ribbonPath == null || _ribbonStroke == null || _ribbonAlpha == null) return;
-        if (_ribbonSamples.Count < 2) return;
-
-        var geo = new PathGeometry();
-        var fig = new PathFigure { StartPoint = _ribbonSamples[0], IsClosed = false, IsFilled = false };
-        for (int i = 1; i < _ribbonSamples.Count; i++)
-            fig.Segments.Add(new LineSegment(_ribbonSamples[i], true) { IsSmoothJoin = true });
-        geo.Figures.Add(fig);
-        _ribbonPath.Data = geo;
-
-        var head = _ribbonSamples[0];
-        var tail = _ribbonSamples[^1];
-        if (Len(head, tail) < 0.001) tail = new Point(head.X + 1, head.Y);
-
-        _ribbonStroke.StartPoint = head;
-        _ribbonStroke.EndPoint = tail;
-        _ribbonAlpha.StartPoint = head;
-        _ribbonAlpha.EndPoint = tail;
-    }
-
-    private void DrawRibbonColor(double t)
-    {
-        if (_ribbonStroke == null || _ribbonEffect == null) return;
-
-        var n = _ribbonStroke.GradientStops.Count;
-        for (int i = 0; i < n; i++)
-        {
-            var hue = (_hueOffset + t * 45.0 + i * 55.0) % 360.0;
-            _ribbonStroke.GradientStops[i].Color = Hsl(hue, 1.0, 0.62);
-        }
-        _ribbonEffect.Color = Hsl((_hueOffset + t * 60.0) % 360.0, 1.0, 0.55);
-    }
-
     private void DieBalls()
     {
         _dead = true;
         _deadAt = Now;
-        var n = _segs.Count;
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < _segs.Count; i++)
         {
-            var seg = _segs[i];
             var hue = (Now * 55.0 + i * 11.0) % 360.0;
-            TriggerBurst((_isSkia || _isTurbo) ? seg.To : seg.Stored, hue, 18);
-            if (_isSkia || _isTurbo) continue;
-            var fade = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.55))
-            {
-                BeginTime = TimeSpan.FromSeconds(i * 0.012),
-                EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
-            };
-            seg.Ell.BeginAnimation(OpacityProperty, fade);
+            TurboBurst(_segs[i].To, hue, 18);
         }
     }
 
@@ -607,139 +393,8 @@ public partial class SnakeGame : UserControl
         for (int i = 0; i < samples.Count; i += Math.Max(1, samples.Count / 16))
         {
             var hue = (i * 11.0 + Now * 55.0) % 360.0;
-            TriggerBurst(samples[i], hue, 12);
+            TurboBurst(samples[i], hue, 12);
         }
-        if (_isSkia || _isTurbo) return;
-        if (_ribbonPath != null)
-        {
-            var fade = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromSeconds(0.6))
-            { EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-            _ribbonPath.BeginAnimation(OpacityProperty, fade);
-        }
-    }
-
-    private void EatFoodShared(Food f)
-    {
-        if (_isSkia) { SkiaEatFood(f); return; }
-        if (_isTurbo) { TurboEatFood(f); return; }
-        Field.Children.Remove(f.Shape);
-        _foods.Remove(f);
-        var pos = CellCenter(f.Cell);
-        TriggerBurst(pos, f.Hue, 28);
-
-        _hueOffset = (_hueOffset + 33.0) % 360.0;
-        if (!_rainbow)
-        {
-            if (_mode == Settings.RenderMode.Balls) UpdateBallsColors(0);
-            else if (_ribbonStroke != null) DrawRibbonColor(0);
-        }
-
-        if (_mode == Settings.RenderMode.Balls)
-        {
-            var head = _segs.FirstOrDefault();
-            if (head != null)
-            {
-                var scale = new ScaleTransform(1, 1) { CenterX = head.Half, CenterY = head.Half };
-                head.Ell.RenderTransform = scale;
-                var pop = new System.Windows.Media.Animation.DoubleAnimation(1.0, 1.45, TimeSpan.FromSeconds(0.22))
-                {
-                    AutoReverse = true,
-                    EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
-                };
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
-            }
-        }
-    }
-
-    private void TriggerBurst(Point center, double hue, int count)
-    {
-        if (_isSkia) { SkiaBurst(center, hue, count); return; }
-        if (_isTurbo) { TurboBurst(center, hue, count); return; }
-        for (int i = 0; i < count; i++)
-        {
-            var ph = (hue + _rng.Next(-30, 30) + 360) % 360.0;
-            var p = new Ellipse
-            {
-                Width = _rng.Next(7, 16),
-                Height = _rng.Next(7, 16),
-                Fill = new SolidColorBrush(Hsl(ph, 1.0, _rng.NextDouble() * 0.2 + 0.55)),
-                Effect = new BlurEffect { Radius = _rng.Next(0, 5) }
-            };
-            var offX = -p.Width / 2;
-            var offY = -p.Height / 2;
-            Canvas.SetLeft(p, center.X + offX);
-            Canvas.SetTop(p, center.Y + offY);
-            Field.Children.Add(p);
-
-            var ang = _rng.NextDouble() * Math.PI * 2;
-            var spd = _rng.Next(40, 170);
-            var dx = Math.Cos(ang) * spd;
-            var dy = Math.Sin(ang) * spd;
-            var dur = TimeSpan.FromSeconds(_rng.NextDouble() * 0.45 + 0.55);
-            var ax = new System.Windows.Media.Animation.DoubleAnimation(center.X + offX, center.X + offX + dx, dur)
-            { EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-            var ay = new System.Windows.Media.Animation.DoubleAnimation(center.Y + offY, center.Y + offY + dy, dur)
-            { EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-            var ao = new System.Windows.Media.Animation.DoubleAnimation(1, 0, dur) { EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
-            var grow = new System.Windows.Media.Animation.DoubleAnimation(1, 0.2, dur);
-
-            var ell = p;
-            ax.Completed += (_, _) => Field.Children.Remove(ell);
-            ell.BeginAnimation(Canvas.LeftProperty, ax);
-            ell.BeginAnimation(Canvas.TopProperty, ay);
-            ell.BeginAnimation(OpacityProperty, ao);
-            var st = new ScaleTransform(1, 1) { CenterX = p.Width / 2, CenterY = p.Height / 2 };
-            ell.RenderTransform = st;
-            st.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
-            st.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
-        }
-    }
-
-    private Seg CreateSeg()
-    {
-        var ell = new Ellipse
-        {
-            Width = Cell * 0.92,
-            Height = Cell * 0.92,
-            StrokeThickness = 2,
-            RenderTransformOrigin = new Point(0.5, 0.5)
-        };
-        var fill = new RadialGradientBrush
-        {
-            GradientOrigin = new Point(0.35, 0.35),
-            Center = new Point(0.5, 0.5),
-            RadiusX = 0.5,
-            RadiusY = 0.5
-        };
-        fill.GradientStops.Add(new GradientStop(Colors.White, 0));
-        fill.GradientStops.Add(new GradientStop(Colors.Violet, 1));
-        ell.Fill = fill;
-        var stroke = new SolidColorBrush(Colors.White);
-        ell.Stroke = stroke;
-        DropShadowEffect? dse = null;
-        if (Settings.DropShadow)
-        {
-            dse = new DropShadowEffect
-            {
-                Color = Colors.Magenta,
-                BlurRadius = 16,
-                ShadowDepth = 8,
-                Direction = 320,
-                Opacity = 0.95,
-                RenderingBias = RenderingBias.Performance
-            };
-            ell.Effect = dse;
-        }
-        Field.Children.Add(ell);
-        return new Seg
-        {
-            Ell = ell,
-            Fill = fill,
-            Stroke = stroke,
-            Shadow = dse,
-            Half = ell.Width / 2
-        };
     }
 
     private void SpawnFood()
@@ -785,92 +440,7 @@ public partial class SnakeGame : UserControl
             PulseFreq = 2 * Math.PI / (_rng.NextDouble() * 0.4 + 0.5),
             RotSpeed = 1.0 / (_rng.NextDouble() * 4 + 3)
         };
-        if (_isSkia)
-        {
-            SkiaAddFood(food);
-            _foods.Add(food);
-            return;
-        }
-        if (_isTurbo)
-        {
-            TurboAddFood(food);
-            _foods.Add(food);
-            return;
-        }
-        Shape sh;
-        double w = Cell * 0.78, h = Cell * 0.78;
-
-        if (kind == 0)
-        {
-            sh = new Ellipse { Width = w, Height = h };
-        }
-        else
-        {
-            var path = new Path
-            {
-                Width = w,
-                Height = h,
-                Stretch = Stretch.Fill,
-                Data = FoodGeometry(kind)
-            };
-            sh = path;
-        }
-
-        var fill = new RadialGradientBrush
-        {
-            GradientOrigin = new Point(0.4, 0.4),
-            Center = new Point(0.5, 0.5),
-            RadiusX = 0.65,
-            RadiusY = 0.65
-        };
-        fill.GradientStops.Add(new GradientStop(Hsl(hue, 0.85, 0.85), 0));
-        fill.GradientStops.Add(new GradientStop(Hsl(hue, 1.0, 0.45), 1));
-        sh.Fill = fill;
-
-        sh.Stroke = new SolidColorBrush(Hsl((hue + 320) % 360.0, 1.0, 0.7));
-        sh.StrokeThickness = 1.8;
-        sh.UseLayoutRounding = true;
-
-        if (Settings.DropShadow)
-        {
-            sh.Effect = new DropShadowEffect
-            {
-                Color = Hsl(hue, 1.0, 0.55),
-                BlurRadius = 18,
-                ShadowDepth = 4,
-                Direction = 315,
-                Opacity = 0.95,
-                RenderingBias = RenderingBias.Performance
-            };
-        }
-
-        var pos = CellCenter(cell);
-        Canvas.SetLeft(sh, pos.X - w / 2);
-        Canvas.SetTop(sh, pos.Y - h / 2);
-        sh.RenderTransformOrigin = new Point(0.5, 0.5);
-
-        var group = new TransformGroup();
-        var scale = new ScaleTransform(1, 1);
-        var rot = new RotateTransform();
-        group.Children.Add(scale);
-        group.Children.Add(rot);
-        sh.RenderTransform = group;
-
-        rot.BeginAnimation(RotateTransform.AngleProperty,
-            new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(_rng.NextDouble() * 4 + 3))
-            { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever });
-
-        var pulseDur = TimeSpan.FromSeconds(_rng.NextDouble() * 0.4 + 0.5);
-        var sx = new System.Windows.Media.Animation.DoubleAnimation(1.0, 1.2, pulseDur)
-        { AutoReverse = true, RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever, EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut } };
-        var sy = new System.Windows.Media.Animation.DoubleAnimation(1.0, 1.2, pulseDur)
-        { AutoReverse = true, RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever, EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut } };
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty, sx);
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty, sy);
-
-        Field.Children.Add(sh);
-
-        food.Shape = sh;
+        TurboAddFood(food);
         _foods.Add(food);
     }
 
@@ -950,7 +520,6 @@ public partial class SnakeGame : UserControl
         public (int X, int Y) Cell;
         public double Hue;
         public int Kind;
-        public Shape? Shape;
         public int Growth;
         public double SpawnTime;
         public double PulseFreq;
@@ -959,23 +528,10 @@ public partial class SnakeGame : UserControl
 
     private sealed class Seg
     {
-        public Ellipse Ell = null!;
-        public RadialGradientBrush Fill = null!;
-        public SolidColorBrush Stroke = null!;
-        public DropShadowEffect? Shadow;
         public double Half;
         public Point Stored;
         public Point To;
         public double MoveStart;
         public double MoveDuration;
-
-        public void AnimateTo(Point center, TimeSpan dur)
-        {
-            var ax = new System.Windows.Media.Animation.DoubleAnimation(Stored.X - Half, center.X - Half, dur);
-            var ay = new System.Windows.Media.Animation.DoubleAnimation(Stored.Y - Half, center.Y - Half, dur);
-            Ell.BeginAnimation(Canvas.LeftProperty, ax);
-            Ell.BeginAnimation(Canvas.TopProperty, ay);
-            Stored = center;
-        }
     }
 }

@@ -58,6 +58,10 @@ App.xaml                  — стили (TrayBtn, TrayBtnQuit, TrayExpander, Tr
 
 ## Текущее состояние багов
 
+- ✅ **Только Turbo 2026-11-12:** Skia (SnakeGameSkia.cs, NuGet SkiaSharp, NoWarn CS0618) и
+  legacy WPF (Canvas Field, Ellipse/Path/анимации) удалены; Settings.Renderer и ключ `Render`
+  убраны (старый ключ в конфиге игнорируется). Записи ниже про Skia/legacy — история.
+
 - ⏳ **Злая голова 2026-11-12:** Turbo-лицо переделано (глаз спереди, бровь, нос с паром,
   клыки, слюна, язык, отрыжка звёздами; ухмылка с затылка убрана). Не закоммичено —
   пользователь оценивает, при отказе откатить SnakeGameFeeding.cs/SnakeGameTurbo.cs.

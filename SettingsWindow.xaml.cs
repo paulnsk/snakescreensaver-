@@ -9,9 +9,6 @@ public partial class SettingsWindow : Window
     public SettingsWindow()
     {
         InitializeComponent();
-        RendererWpf.IsChecked = Settings.Render == Settings.Renderer.Wpf;
-        RendererSkia.IsChecked = Settings.Render == Settings.Renderer.Skia;
-        RendererWpfTurbo.IsChecked = Settings.Render == Settings.Renderer.WpfTurbo;
         RenderBalls.IsChecked = Settings.Mode == Settings.RenderMode.Balls;
         RenderRibbon.IsChecked = Settings.Mode == Settings.RenderMode.Ribbon;
         ExitEsc.IsChecked = Settings.Exit == Settings.ExitMode.EscapeOnly;
@@ -22,13 +19,6 @@ public partial class SettingsWindow : Window
         MagicPoopChk.IsChecked = Settings.MagicPoop;
         IdleSlider.Value = Settings.IdleMinutes;
         StartupChk.IsChecked = Settings.RunAtStartup;
-    }
-
-    private void Renderer_Checked(object sender, RoutedEventArgs e)
-    {
-        if (RendererWpf.IsChecked == true) Settings.Render = Settings.Renderer.Wpf;
-        else if (RendererSkia.IsChecked == true) Settings.Render = Settings.Renderer.Skia;
-        else if (RendererWpfTurbo.IsChecked == true) Settings.Render = Settings.Renderer.WpfTurbo;
     }
 
     private void Render_Checked(object sender, RoutedEventArgs e)

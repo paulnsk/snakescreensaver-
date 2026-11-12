@@ -87,7 +87,7 @@ public sealed class TrayHost : IDisposable
 
     public void LaunchSnake()
     {
-        Log.Line($"LaunchSnake: enter, renderer={Settings.Render}");
+        Log.Line("LaunchSnake: enter");
         if (_window != null && _window.IsVisible)
         {
             _window.Activate();

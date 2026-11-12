@@ -9,8 +9,6 @@
              Background="Transparent"
              Focusable="True">
     <Grid>
-        <Canvas x:Name="Field"/>
-        <Image x:Name="SkiaImage" Visibility="Collapsed" Stretch="None"/>
-        <snake:SnakeTurboCanvas x:Name="TurboCanvas" Visibility="Collapsed"/>
+        <snake:SnakeTurboCanvas x:Name="TurboCanvas"/>
     </Grid>
 </UserControl>

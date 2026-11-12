@@ -10,14 +10,12 @@ internal static class Settings
 {
     public enum RenderMode { Balls = 0, Ribbon = 1 }
     public enum ExitMode { EscapeOnly = 0, MouseMove = 1 }
-    public enum Renderer { Wpf = 0, Skia = 1, WpfTurbo = 2 }
 
     public static RenderMode Mode = RenderMode.Balls;
     public static bool Rainbow = true;
     public static ExitMode Exit = ExitMode.EscapeOnly;
     public static int IdleMinutes = 5;
     public static bool RunAtStartup = false;
-    public static Renderer Render = Renderer.Wpf;
     public static bool DropShadow = true;
     public static bool LivingSnake = true;
     public static bool MagicPoop = true;
@@ -38,7 +36,6 @@ internal static class Settings
             Rainbow = true;
             Exit = ExitMode.EscapeOnly;
             IdleMinutes = 5;
-            Render = Renderer.Wpf;
             DropShadow = true;
             LivingSnake = true;
             MagicPoop = true;
@@ -49,7 +46,6 @@ internal static class Settings
             if (MatchBool(txt, "Rainbow", out var rb)) Rainbow = rb;
             if (MatchInt(txt, "Exit", out var ex)) Exit = (ExitMode)ex;
             if (MatchInt(txt, "IdleMinutes", out var im) && im >= 0 && im <= 240) IdleMinutes = im;
-            if (MatchInt(txt, "Render", out var rr)) Render = (Renderer)rr;
             if (MatchBool(txt, "DropShadow", out var ds)) DropShadow = ds;
             if (MatchBool(txt, "LivingSnake", out var ls)) LivingSnake = ls;
             if (MatchBool(txt, "MagicPoop", out var mp)) MagicPoop = mp;
@@ -69,7 +65,6 @@ internal static class Settings
                 $"  \"Rainbow\": {(Rainbow ? "true" : "false")},\n" +
                 $"  \"Exit\": {(int)Exit},\n" +
                 $"  \"IdleMinutes\": {IdleMinutes},\n" +
-                $"  \"Render\": {(int)Render},\n" +
                 $"  \"DropShadow\": {(DropShadow ? "true" : "false")},\n" +
                 $"  \"LivingSnake\": {(LivingSnake ? "true" : "false")},\n" +
                 $"  \"MagicPoop\": {(MagicPoop ? "true" : "false")},\n" +
