@@ -285,6 +285,7 @@ public partial class SnakeGame : UserControl
         var head = _ribbonSamples[0];
         var newHead = new Point(head.X + _ribbonDir.dx * _ribbonSpeed * dt, head.Y + _ribbonDir.dy * _ribbonSpeed * dt);
         _ribbonSamples.Insert(0, newHead);
+        _ribbonTraveled += _ribbonSpeed * dt;
 
         var nc = PixelToCell(newHead);
         if (nc.X != _ribbonHeadCell.X || nc.Y != _ribbonHeadCell.Y)

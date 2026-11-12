@@ -58,6 +58,10 @@ App.xaml                  — стили (TrayBtn, TrayBtnQuit, TrayExpander, Tr
 
 ## Текущее состояние багов
 
+- ⏳ **Стиль Brutal 2026-11-12:** Settings.Style (Classic/Brutal), код в Snake/SnakeGameBrutal.cs,
+  ветки `if (Brutal)` в отрисовке шариков/ленты/еды/головы. Не закоммичено, ждёт оценки
+  пользователя. Детали — PLAN.md.
+
 - ✅ **Только Turbo 2026-11-12:** Skia (SnakeGameSkia.cs, NuGet SkiaSharp, NoWarn CS0618) и
   legacy WPF (Canvas Field, Ellipse/Path/анимации) удалены; Settings.Renderer и ключ `Render`
   убраны (старый ключ в конфиге игнорируется). Записи ниже про Skia/legacy — история.

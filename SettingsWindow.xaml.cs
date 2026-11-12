@@ -9,6 +9,8 @@ public partial class SettingsWindow : Window
     public SettingsWindow()
     {
         InitializeComponent();
+        StyleClassic.IsChecked = Settings.Style == Settings.SnakeStyle.Classic;
+        StyleBrutal.IsChecked = Settings.Style == Settings.SnakeStyle.Brutal;
         RenderBalls.IsChecked = Settings.Mode == Settings.RenderMode.Balls;
         RenderRibbon.IsChecked = Settings.Mode == Settings.RenderMode.Ribbon;
         ExitEsc.IsChecked = Settings.Exit == Settings.ExitMode.EscapeOnly;
@@ -19,6 +21,12 @@ public partial class SettingsWindow : Window
         MagicPoopChk.IsChecked = Settings.MagicPoop;
         IdleSlider.Value = Settings.IdleMinutes;
         StartupChk.IsChecked = Settings.RunAtStartup;
+    }
+
+    private void Style_Checked(object sender, RoutedEventArgs e)
+    {
+        if (StyleClassic.IsChecked == true) Settings.Style = Settings.SnakeStyle.Classic;
+        else if (StyleBrutal.IsChecked == true) Settings.Style = Settings.SnakeStyle.Brutal;
     }
 
     private void Render_Checked(object sender, RoutedEventArgs e)

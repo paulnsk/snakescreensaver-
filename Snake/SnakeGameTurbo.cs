@@ -66,7 +66,7 @@ public partial class SnakeGame
     {
         for (int i = 0; i < count; i++)
         {
-            var ph = (hue + _rng.Next(-30, 30) + 360) % 360.0;
+            var ph = Brutal ? 15 + _rng.NextDouble() * 40 : (hue + _rng.Next(-30, 30) + 360) % 360.0;
             var l = _rng.NextDouble() * 0.2 + 0.55;
             var c = Hsl(ph, 1.0, l);
             var ang = _rng.NextDouble() * Math.PI * 2;
@@ -124,6 +124,11 @@ public partial class SnakeGame
             if (pp < 1) pop = 1 + 0.45 * Math.Sin(pp * Math.PI);
             else _turboEatPopStart = -1;
         }
+        if (Brutal)
+        {
+            TurboDrawBrutalBalls(dc, canvas, t, pop);
+            return;
+        }
 
         if (Settings.DropShadow)
         {
@@ -176,6 +181,15 @@ public partial class SnakeGame
             var rot = age * f.RotSpeed * 360;
             var halfW = w * 0.5 * pulse;
             if (!canvas.WorldBounds.IsEmpty && !canvas.WorldBounds.IntersectsWith(new Rect(pos.X - halfW * 2, pos.Y - halfW * 2, halfW * 4, halfW * 4))) continue;
+            if (Brutal)
+            {
+                dc.PushTransform(new TranslateTransform(pos.X, pos.Y));
+                dc.PushTransform(new RotateTransform(rot));
+                TurboDrawBrutalFood(dc, f.Kind, halfW);
+                dc.Pop();
+                dc.Pop();
+                continue;
+            }
             var hueKey = (int)f.Hue;
 
             if (Settings.DropShadow)
@@ -229,6 +243,11 @@ public partial class SnakeGame
                 ctx.LineTo(_ribbonSamples[i], true, true);
         }
         geo.Freeze();
+        if (Brutal)
+        {
+            TurboDrawBrutalRibbon(dc, geo);
+            return;
+        }
 
         var brush = new LinearGradientBrush
         {

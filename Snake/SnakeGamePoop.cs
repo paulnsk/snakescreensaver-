@@ -153,6 +153,13 @@ public partial class SnakeGame
         var hue = (int)_tailHue;
         dc.PushTransform(new TranslateTransform(_tailOutlet.X, _tailOutlet.Y));
         dc.PushTransform(new RotateTransform(Math.Atan2(_tailDirection.Y, _tailDirection.X) * 180 / Math.PI));
+        if (Brutal)
+        {
+            TurboDrawBrutalExhaust(dc, rx, ry, opening, t);
+            dc.Pop();
+            dc.Pop();
+            return;
+        }
         if (Settings.DropShadow)
             dc.DrawEllipse(canvas.GetGlow(hue), null, new Point(), rx * 2.2, ry * 1.8);
         dc.DrawEllipse(canvas.GetFill(hue), canvas.GetStrokePen((hue + 325) % 360, 1.4), new Point(), rx, ry);
@@ -191,6 +198,11 @@ public partial class SnakeGame
             if (!canvas.WorldBounds.IsEmpty && !canvas.WorldBounds.IntersectsWith(new Rect(pos.X - size, pos.Y - size, size * 2, size * 2))) continue;
             var fade = Math.Clamp((PoopLifetime - age) / 2, 0, 1);
             var hue = MagicPoopHue(drop.Hue);
+            if (Brutal)
+            {
+                TurboDrawBrutalSlag(dc, pos, size, age, fade, drop.Hue);
+                continue;
+            }
             dc.PushOpacity(fade * fade * (0.88 + 0.12 * Math.Sin(age * 13 + drop.Hue)));
             if (Settings.DropShadow)
                 dc.DrawEllipse(canvas.GetGlow(hue), null, pos, size, size * 0.8);

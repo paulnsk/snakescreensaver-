@@ -260,7 +260,7 @@ public partial class SnakeGame
                     Born = t,
                     Spin = (_rng.NextDouble() - 0.5) * 9,
                     Size = r * (0.16 + _rng.NextDouble() * 0.14),
-                    Hue = ((int)meal.Food.Hue + _rng.Next(-40, 40) + 360) % 360
+                    Hue = Brutal ? _rng.Next(25, 55) : ((int)meal.Food.Hue + _rng.Next(-40, 40) + 360) % 360
                 });
             }
         }
@@ -331,11 +331,13 @@ public partial class SnakeGame
                                 head.Y + sin * along + cos * side);
             var size = Cell * 0.78 * (1 - Math.Max(0, progress - 0.65) * 1.4);
             if (!canvas.WorldBounds.IsEmpty && !canvas.WorldBounds.IntersectsWith(new Rect(pos.X - size, pos.Y - size, size * 2, size * 2))) continue;
-            if (Settings.DropShadow)
+            if (Settings.DropShadow && !Brutal)
                 dc.DrawEllipse(canvas.GetGlow((int)meal.Food.Hue), null, pos, size * 0.8, size * 0.8);
             dc.PushTransform(new TranslateTransform(pos.X, pos.Y));
             dc.PushTransform(new RotateTransform(t * meal.Food.RotSpeed * 360 + progress * 90));
-            if (meal.Food.Kind == 0)
+            if (Brutal)
+                TurboDrawBrutalFood(dc, meal.Food.Kind, size / 2);
+            else if (meal.Food.Kind == 0)
                 dc.DrawEllipse(canvas.GetFill((int)meal.Food.Hue), canvas.GetStrokePen((int)meal.Food.Hue, 1.8), new Point(), size / 2, size / 2);
             else
             {
@@ -361,7 +363,9 @@ public partial class SnakeGame
         var angle = Math.Max(0.001, _jawAngle);
         var hue = (int)((_hueOffset + (_rainbow ? t * 55 : 0)) % 360);
 
-        if (Settings.DropShadow)
+        if (Settings.DropShadow && Brutal)
+            dc.DrawEllipse(ShadowBrush, null, new Point(head.X + 4, head.Y + 5), r, r);
+        else if (Settings.DropShadow)
         {
             var glow = canvas.GetGlowImage(hue, Cell * 0.46 * 1.45);
             var size = glow.Width * r / (Cell * 0.46);
@@ -382,7 +386,13 @@ public partial class SnakeGame
             ctx.ArcTo(lower, new System.Windows.Size(r, r), 0, true, SweepDirection.Counterclockwise, true, true);
         }
         face.Freeze();
-        dc.DrawGeometry(canvas.GetFill(hue), canvas.GetStrokePen(hue, 1.8), face);
+        var headFill = Brutal ? SteelHeadBrush : canvas.GetFill(hue);
+        dc.DrawGeometry(headFill, Brutal ? InkPen : canvas.GetStrokePen(hue, 1.8), face);
+        if (Brutal)
+        {
+            foreach (var a in RivetAngles)
+                dc.DrawEllipse(LightSteelBrush, ThinInkPen, new Point(r * 0.8 * Math.Cos(a), r * 0.8 * Math.Sin(a)), r * 0.075, r * 0.075);
+        }
 
         var ink = new System.Windows.Media.Pen(System.Windows.Media.Brushes.MidnightBlue, 2.1)
         {
@@ -517,7 +527,7 @@ public partial class SnakeGame
         var length = Math.Max(1, Math.Sqrt(gaze.X * gaze.X + gaze.Y * gaze.Y));
         var iris = new Point(eye.X + (gaze.X * cos + gaze.Y * sin) / length * r * 0.1,
             eye.Y + (-gaze.X * sin + gaze.Y * cos) / length * r * 0.07 * flip);
-        dc.DrawEllipse(System.Windows.Media.Brushes.Gold, null, iris, r * 0.16, r * 0.16);
+        dc.DrawEllipse(Brutal ? BloodBrush : System.Windows.Media.Brushes.Gold, null, iris, r * 0.16, r * 0.16);
         dc.DrawEllipse(System.Windows.Media.Brushes.MidnightBlue, null, iris, r * Math.Max(0.025, 0.065 - 0.035 * anger), r * 0.13);
         dc.DrawEllipse(System.Windows.Media.Brushes.White, null, new Point(iris.X - r * 0.05, iris.Y - r * 0.07), r * 0.035, r * 0.045);
         var lidDrop = r * (0.06 * anger + 0.2 * _lidTwitch);
@@ -535,7 +545,7 @@ public partial class SnakeGame
         var eyeClip = new EllipseGeometry(eye, eyeX, eyeY);
         eyeClip.Freeze();
         dc.PushClip(eyeClip);
-        dc.DrawGeometry(canvas.GetFill(hue), null, lid);
+        dc.DrawGeometry(headFill, null, lid);
         dc.DrawLine(ink, lidBack, lidFront);
         dc.Pop();
 
@@ -572,7 +582,7 @@ public partial class SnakeGame
         browBrush.Freeze();
         dc.DrawGeometry(browBrush, null, spikes);
         dc.DrawGeometry(browBrush, null, brow);
-        dc.DrawLine(shine, new Point(-r * 0.65, -r * 0.46), new Point(-r * 0.46, -r * 0.69));
+        if (!Brutal) dc.DrawLine(shine, new Point(-r * 0.65, -r * 0.46), new Point(-r * 0.46, -r * 0.69));
         dc.Pop();
         dc.Pop();
         dc.Pop();
@@ -580,6 +590,7 @@ public partial class SnakeGame
     }
 
     private static readonly double[] VeinAngles = { 2.5, 3.0, 3.5, 0.6 };
+    private static readonly double[] RivetAngles = { 2.45, 2.95, 3.45, 3.95 };
     private void TurboDrawDigestingRibbon(DrawingContext dc, SnakeTurboCanvas canvas, double t)
     {
         var samples = _ribbonSamples;
@@ -616,6 +627,11 @@ public partial class SnakeGame
         }
         geo.Freeze();
         if (Len(head, tail) < 0.01) tail = new Point(head.X + 1, head.Y);
+        if (Brutal)
+        {
+            TurboDrawBrutalDigestingRibbon(dc, geo, left, right, head, tail);
+            return;
+        }
         var fill = new LinearGradientBrush { StartPoint = head, EndPoint = tail, MappingMode = BrushMappingMode.Absolute };
         for (int i = 0; i < 6; i++)
         {

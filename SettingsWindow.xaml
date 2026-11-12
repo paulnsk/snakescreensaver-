@@ -43,7 +43,13 @@
 
                 <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource SettingsCard}">
                     <StackPanel>
-                        <TextBlock Text="RENDER MODE" Style="{StaticResource SettingsLabel}"/>
+                        <TextBlock Text="STYLE" Style="{StaticResource SettingsLabel}"/>
+                        <WrapPanel>
+                            <RadioButton x:Name="StyleClassic" Content="🍬 Classic" GroupName="st" Style="{StaticResource TrayRadio}" Checked="Style_Checked"/>
+                            <RadioButton x:Name="StyleBrutal" Content="🔩 Brutal" GroupName="st" Style="{StaticResource TrayRadio}" Checked="Style_Checked"/>
+                        </WrapPanel>
+
+                        <TextBlock Text="RENDER MODE" Style="{StaticResource SettingsLabel}" Margin="4,14,0,4"/>
                         <WrapPanel>
                             <RadioButton x:Name="RenderBalls" Content="⚽ Balls" GroupName="rm" Style="{StaticResource TrayRadio}" Checked="Render_Checked"/>
                             <RadioButton x:Name="RenderRibbon" Content="🌀 Ribbon" GroupName="rm" Style="{StaticResource TrayRadio}" Checked="Render_Checked"/>

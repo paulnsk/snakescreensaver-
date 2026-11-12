@@ -10,8 +10,10 @@ internal static class Settings
 {
     public enum RenderMode { Balls = 0, Ribbon = 1 }
     public enum ExitMode { EscapeOnly = 0, MouseMove = 1 }
+    public enum SnakeStyle { Classic = 0, Brutal = 1 }
 
     public static RenderMode Mode = RenderMode.Balls;
+    public static SnakeStyle Style = SnakeStyle.Classic;
     public static bool Rainbow = true;
     public static ExitMode Exit = ExitMode.EscapeOnly;
     public static int IdleMinutes = 5;
@@ -33,6 +35,7 @@ internal static class Settings
         try
         {
             Mode = RenderMode.Balls;
+            Style = SnakeStyle.Classic;
             Rainbow = true;
             Exit = ExitMode.EscapeOnly;
             IdleMinutes = 5;
@@ -43,6 +46,7 @@ internal static class Settings
             if (!File.Exists(FilePath)) return;
             var txt = File.ReadAllText(FilePath);
             if (MatchInt(txt, "Mode", out var mi)) Mode = (RenderMode)mi;
+            if (MatchInt(txt, "Style", out var st)) Style = (SnakeStyle)st;
             if (MatchBool(txt, "Rainbow", out var rb)) Rainbow = rb;
             if (MatchInt(txt, "Exit", out var ex)) Exit = (ExitMode)ex;
             if (MatchInt(txt, "IdleMinutes", out var im) && im >= 0 && im <= 240) IdleMinutes = im;
@@ -62,6 +66,7 @@ internal static class Settings
             var json =
                 "{\n" +
                 $"  \"Mode\": {(int)Mode},\n" +
+                $"  \"Style\": {(int)Style},\n" +
                 $"  \"Rainbow\": {(Rainbow ? "true" : "false")},\n" +
                 $"  \"Exit\": {(int)Exit},\n" +
                 $"  \"IdleMinutes\": {IdleMinutes},\n" +
