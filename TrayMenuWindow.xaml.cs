@@ -59,7 +59,7 @@ public partial class TrayMenuWindow : Window
         {
             var rb = new RadioButton
             {
-                Content = v == 0 ? "OFF (manual only)" : $"{v} min after idle",
+                Content = v == 0 ? "Off" : $"{v} min",
                 GroupName = "idle",
                 Tag = v,
                 Style = (Style)FindResource("TrayRadio"),

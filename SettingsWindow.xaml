@@ -2,103 +2,107 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Snake Settings"
-        Width="560" Height="980"
+        Width="860"
+        SizeToContent="Height"
         WindowStyle="None"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         Topmost="True"
         AllowsTransparency="True"
         Background="Transparent"
+        WindowStartupLocation="CenterScreen"
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
         PreviewKeyDown="Window_PreviewKeyDown">
-    <Border CornerRadius="28" Padding="22">
-        <Border.Background>
-            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                <GradientStop Color="#7C0F8F" Offset="0"/>
-                <GradientStop Color="#FF1AABAE" Offset="0.4"/>
-                <GradientStop Color="#FFF15E48" Offset="0.8"/>
-                <GradientStop Color="#FFFFB400" Offset="1"/>
-            </LinearGradientBrush>
-        </Border.Background>
-        <Border.Effect>
-            <DropShadowEffect Color="#FF66CC" BlurRadius="46" ShadowDepth="0" Opacity="0.65"/>
-        </Border.Effect>
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+    <Border CornerRadius="8" Margin="18"
+            Background="{StaticResource Grit}"
+            BorderBrush="{StaticResource InkBrush}"
+            BorderThickness="3"
+            Effect="{StaticResource WindowShadow}">
+        <StackPanel>
+            <Border Height="14" CornerRadius="5,5,0,0" Background="{StaticResource HazardStripes}"/>
+            <Grid Margin="16,12,10,16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
 
-            <Border Grid.Row="0" CornerRadius="22" Padding="18,8" HorizontalAlignment="Center" Margin="0,0,0,16">
-                <Border.Background>
-                    <RadialGradientBrush>
-                        <GradientStop Color="#FFFFD9F0" Offset="0"/>
-                        <GradientStop Color="#FF4F08DE" Offset="1"/>
-                    </RadialGradientBrush>
-                </Border.Background>
-                <Border.Effect>
-                    <DropShadowEffect Color="#FFFF66FF" BlurRadius="18" ShadowDepth="0"/>
-                </Border.Effect>
-                <TextBlock Text="⚙️ SNAKE SETTINGS 🐍" FontSize="30" FontWeight="Black"
-                           Foreground="White" FontFamily="Comic Sans MS, Segoe UI"/>
-            </Border>
+                <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12">
+                    <Border Style="{StaticResource TrayChip}" Background="{StaticResource HazardBrush}" Width="48" Height="48">
+                        <TextBlock Text="⚙" Style="{StaticResource TrayChipText}" FontSize="24"/>
+                    </Border>
+                    <TextBlock Text="SNAKE SETTINGS" Style="{StaticResource BrutalTitle}" FontSize="40"/>
+                    <Border Style="{StaticResource TrayChip}" Background="{StaticResource AcidBrush}" Width="48" Height="48" Margin="14,0,0,0">
+                        <TextBlock Text="🐍" Style="{StaticResource TrayChipText}" FontSize="24"/>
+                    </Border>
+                </StackPanel>
 
-            <Border Grid.Row="1" CornerRadius="22" Padding="22" Background="#CC110022" Margin="6">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Orientation="Vertical">
-
-                        <TextBlock Text="🖥️ RENDERER" Style="{StaticResource SettingsLabel}"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,6">
+                <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource SettingsCard}">
+                    <StackPanel>
+                        <TextBlock Text="RENDERER" Style="{StaticResource SettingsLabel}"/>
+                        <WrapPanel>
                             <RadioButton x:Name="RendererWpf" Content="WPF (legacy)" GroupName="rnd" Style="{StaticResource TrayRadio}" Checked="Renderer_Checked"/>
-                            <RadioButton x:Name="RendererSkia" Content="Skia" GroupName="rnd" Style="{StaticResource TrayRadio}" Checked="Renderer_Checked" Margin="14,0,0,0"/>
-                            <RadioButton x:Name="RendererWpfTurbo" Content="WPF TURBO" GroupName="rnd" Style="{StaticResource TrayRadio}" Checked="Renderer_Checked" Margin="14,0,0,0"/>
-                        </StackPanel>
+                            <RadioButton x:Name="RendererSkia" Content="Skia" GroupName="rnd" Style="{StaticResource TrayRadio}" Checked="Renderer_Checked"/>
+                            <RadioButton x:Name="RendererWpfTurbo" Content="WPF TURBO" GroupName="rnd" Style="{StaticResource TrayRadio}" Checked="Renderer_Checked"/>
+                        </WrapPanel>
 
-                        <TextBlock Text="🎮 RENDER MODE" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,6">
+                        <TextBlock Text="RENDER MODE" Style="{StaticResource SettingsLabel}" Margin="4,14,0,4"/>
+                        <WrapPanel>
                             <RadioButton x:Name="RenderBalls" Content="⚽ Balls" GroupName="rm" Style="{StaticResource TrayRadio}" Checked="Render_Checked"/>
-                            <RadioButton x:Name="RenderRibbon" Content="🌀 Ribbon" GroupName="rm" Style="{StaticResource TrayRadio}" Checked="Render_Checked" Margin="14,0,0,0"/>
-                        </StackPanel>
+                            <RadioButton x:Name="RenderRibbon" Content="🌀 Ribbon" GroupName="rm" Style="{StaticResource TrayRadio}" Checked="Render_Checked"/>
+                        </WrapPanel>
 
-                        <TextBlock Text="🚪 EXIT WHEN" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,6">
-                            <RadioButton x:Name="ExitEsc" Content="ESC key only" GroupName="em" Style="{StaticResource TrayRadio}" Checked="Exit_Checked"/>
-                            <RadioButton x:Name="ExitMouse" Content="Mouse moves" GroupName="em" Style="{StaticResource TrayRadio}" Checked="Exit_Checked" Margin="14,0,0,0"/>
-                        </StackPanel>
+                        <TextBlock Text="EXIT WHEN" Style="{StaticResource SettingsLabel}" Margin="4,14,0,4"/>
+                        <WrapPanel>
+                            <RadioButton x:Name="ExitEsc" Content="Esc key only" GroupName="em" Style="{StaticResource TrayRadio}" Checked="Exit_Checked"/>
+                            <RadioButton x:Name="ExitMouse" Content="Mouse moves" GroupName="em" Style="{StaticResource TrayRadio}" Checked="Exit_Checked"/>
+                        </WrapPanel>
 
-                        <TextBlock Text="🌈 ANIMATED RAINBOW" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
+                        <DockPanel Margin="0,14,0,0">
+                            <Border DockPanel.Dock="Right" CornerRadius="3" Padding="10,1" Background="{StaticResource FlameBrush}"
+                                    BorderBrush="{StaticResource InkBrush}" BorderThickness="2">
+                                <TextBlock Text="{Binding Value, ElementName=IdleSlider, StringFormat={}{0:0} MIN}"
+                                           FontFamily="{StaticResource HeavyFont}" FontSize="17" Foreground="{StaticResource InkBrush}"/>
+                            </Border>
+                            <TextBlock Text="IDLE LAUNCH" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <Slider x:Name="IdleSlider" Minimum="0" Maximum="60" TickFrequency="1" IsSnapToTickEnabled="True"
+                                Style="{StaticResource SettingsSlider}" ValueChanged="Idle_Changed"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingsCard}">
+                    <StackPanel>
+                        <TextBlock Text="ANIMATED RAINBOW" Style="{StaticResource SettingsLabel}"/>
                         <CheckBox x:Name="RainbowChk" Content="per-frame color cycling" Style="{StaticResource SettingsCheckbox}" Checked="Rainbow_Changed" Unchecked="Rainbow_Changed"/>
 
-                        <TextBlock Text="🌑 DROP SHADOW" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
-                        <CheckBox x:Name="DropShadowChk" Content="glow shadow under snake (perf hit; disable for slow GPU)" Style="{StaticResource SettingsCheckbox}" Checked="DropShadow_Changed" Unchecked="DropShadow_Changed"/>
+                        <TextBlock Text="DROP SHADOW" Style="{StaticResource SettingsLabel}" Margin="4,12,0,4"/>
+                        <CheckBox x:Name="DropShadowChk" Content="glow shadow under snake (slower on weak GPU)" Style="{StaticResource SettingsCheckbox}" Checked="DropShadow_Changed" Unchecked="DropShadow_Changed"/>
 
-                        <TextBlock Text="😋 HUNGRY SNAKE" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
-                        <CheckBox x:Name="LivingSnakeChk" Content="animated mouth, bites &amp; digestion" Style="{StaticResource SettingsCheckbox}"
+                        <TextBlock Text="HUNGRY SNAKE" Style="{StaticResource SettingsLabel}" Margin="4,12,0,4"/>
+                        <CheckBox x:Name="LivingSnakeChk" Content="angry face, bites &amp; digestion (Turbo)" Style="{StaticResource SettingsCheckbox}"
                                   IsEnabled="{Binding IsChecked, ElementName=RendererWpfTurbo}"
                                   Checked="LivingSnake_Changed" Unchecked="LivingSnake_Changed"/>
 
-                        <TextBlock Text="✨ MAGIC POOP" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
-                        <CheckBox x:Name="MagicPoopChk" Content="sparkling rainbow treats from the tail" Style="{StaticResource SettingsCheckbox}"
+                        <TextBlock Text="MAGIC POOP" Style="{StaticResource SettingsLabel}" Margin="4,12,0,4"/>
+                        <CheckBox x:Name="MagicPoopChk" Content="sparkling rainbow treats from the tail (Turbo)" Style="{StaticResource SettingsCheckbox}"
                                   IsEnabled="{Binding IsChecked, ElementName=RendererWpfTurbo}"
                                   Checked="MagicPoop_Changed" Unchecked="MagicPoop_Changed"/>
 
-                        <TextBlock Text="⏰ IDLE LAUNCH (minutes)" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
-                        <Slider x:Name="IdleSlider" Minimum="0" Maximum="60" TickFrequency="1" IsSnapToTickEnabled="True"
-                                Style="{StaticResource SettingsSlider}" AutoToolTipPlacement="TopLeft"
-                                AutoToolTipPrecision="0" ValueChanged="Idle_Changed"/>
-
-                        <TextBlock Text="🪛 RUN ON SYSTEM STARTUP" Style="{StaticResource SettingsLabel}" Margin="0,14,0,0"/>
+                        <TextBlock Text="RUN ON STARTUP" Style="{StaticResource SettingsLabel}" Margin="4,12,0,4"/>
                         <CheckBox x:Name="StartupChk" Content="launch snake-in-tray on user logon" Style="{StaticResource SettingsCheckbox}" Checked="Startup_Changed" Unchecked="Startup_Changed"/>
-
                     </StackPanel>
-                </ScrollViewer>
-            </Border>
+                </Border>
 
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
-                <Button Content="APPLY 💾" Style="{StaticResource SettingsOkBtn}" Click="OK_Click"/>
-                <Button Content="CANCEL 🙈" Style="{StaticResource SettingsCancelBtn}" Click="Cancel_Click" Margin="14,0,0,0"/>
-            </StackPanel>
-        </Grid>
+                <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0">
+                    <Button Content="APPLY" Style="{StaticResource SettingsOkBtn}" Click="OK_Click"/>
+                    <Button Content="CANCEL" Style="{StaticResource SettingsCancelBtn}" Click="Cancel_Click" Margin="18,6,6,6"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
     </Border>
 </Window>

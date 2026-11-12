@@ -350,7 +350,6 @@ public partial class SnakeGame : UserControl
             var f = _foods[foodIdx];
             _pendingGrowth += f.Growth;
             EatFoodShared(f);
-            SpawnFood();
         }
 
         _snake.Insert(0, nh);
@@ -363,6 +362,7 @@ public partial class SnakeGame : UserControl
         {
             _snake.RemoveAt(_snake.Count - 1);
         }
+        if (foodIdx >= 0) SpawnFood();
 
         SyncSegs();
     }
@@ -748,6 +748,11 @@ public partial class SnakeGame : UserControl
             ? BodyCellsFromTail()
             : _snake.Select(c => (c.X, c.Y));
         var occupied = new HashSet<(int, int)>(baseOcc);
+        if (_mode == Settings.RenderMode.Ribbon && _ribbonSamples.Count > 0)
+        {
+            var head = PixelToCell(_ribbonSamples[0]);
+            occupied.Add((head.X, head.Y));
+        }
         foreach (var f in _foods) occupied.Add((f.Cell.X, f.Cell.Y));
 
         (int X, int Y)? cell = null;

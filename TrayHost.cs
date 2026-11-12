@@ -15,6 +15,7 @@ public sealed class TrayHost : IDisposable
     private SettingsWindow? _settings;
     private Thread? _idleThread;
     private volatile bool _running;
+    private volatile bool _waitForInput;
 
     public void Start()
     {
@@ -110,6 +111,12 @@ public sealed class TrayHost : IDisposable
         _window = null;
     }
 
+    public void HideSnakeAfterError()
+    {
+        _waitForInput = true;
+        HideSnake();
+    }
+
     public void RestartSnakeIfVisible()
     {
         if (_window == null || !_window.IsVisible) return;
@@ -171,6 +178,11 @@ public sealed class TrayHost : IDisposable
                 if (Settings.IdleMinutes <= 0) continue;
                 if (_window != null && _window.IsVisible) continue;
                 var idle = IdleMonitor.GetIdleSeconds();
+                if (_waitForInput)
+                {
+                    if (idle < pollSec * 2) _waitForInput = false;
+                    continue;
+                }
                 if (idle >= Settings.IdleMinutes * 60.0)
                     System.Windows.Application.Current.Dispatcher.BeginInvoke(LaunchSnake);
             }

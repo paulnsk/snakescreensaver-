@@ -15,6 +15,7 @@ public partial class App : Application
 
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandled;
         Current.DispatcherUnhandledException += OnDispatcherUnhandled;
+        System.Windows.Forms.Application.ThreadException += OnWinFormsThreadException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTask;
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
@@ -40,6 +41,20 @@ public partial class App : Application
     private static void OnDispatcherUnhandled(object? s, DispatcherUnhandledExceptionEventArgs ea)
     {
         Log.Exc("Dispatcher.UnhandledException", ea.Exception);
+        ea.Handled = true;
+        CloseSnakeAfterError();
+    }
+
+    private static void OnWinFormsThreadException(object? s, System.Threading.ThreadExceptionEventArgs ea)
+    {
+        Log.Exc("WinForms.ThreadException", ea.Exception);
+        CloseSnakeAfterError();
+    }
+
+    private static void CloseSnakeAfterError()
+    {
+        try { Tray?.HideSnakeAfterError(); }
+        catch (Exception ex) { Log.Exc("CloseSnakeAfterError", ex); }
     }
 
     private static void OnUnobservedTask(object? s, UnobservedTaskExceptionEventArgs ea)

@@ -18,8 +18,8 @@ public sealed class SnakeTurboCanvas : Canvas
     private readonly Dictionary<int, SolidColorBrush> _strokeColors = new();
     private readonly Dictionary<int, System.Windows.Media.Pen> _pens = new();
     private readonly Dictionary<int, Geometry> _foodGeo = new();
-    private readonly Dictionary<int, BitmapSource> _glowImages = new();
-    private readonly Dictionary<int, BitmapSource> _fillImages = new();
+    private static readonly Dictionary<int, BitmapSource> _glowImages = new();
+    private static readonly Dictionary<int, BitmapSource> _fillImages = new();
 
     public BitmapSource GetGlowImage(int hue, double radius) => GetImage(_glowImages, hue, radius, true);
     public BitmapSource GetFillImage(int hue, double radius) => GetImage(_fillImages, hue, radius, false);

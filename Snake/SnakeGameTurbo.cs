@@ -109,6 +109,7 @@ public partial class SnakeGame
         {
             TurboDrawSwallows(dc, canvas, t);
             TurboDrawFace(dc, canvas, t);
+            TurboDrawBurps(dc, canvas, t);
         }
         TurboDrawParticles(dc, canvas, t);
     }
