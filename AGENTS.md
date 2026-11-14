@@ -1,4 +1,4 @@
-# AGENTS.md — SnakeScreensaver
+﻿# AGENTS.md — SnakeScreensaver
 
 ## Контекст для следующего агента
 
@@ -14,7 +14,7 @@ dotnet run --project D:\d\SnakeScreensaver\SnakeScreensaver.csproj
 :: либо запустить bin\Debug\net10.0-windows\SnakeScreensaver.exe
 
 :: Publish single-file (он же ПУБЛИШ.bat):
-dotnet publish -c Release -p:PublishMode=singlefile -o D:\d\SnakeScreensaver\publish
+dotnet publish -c Release -p:PublishMode=singlefile -o C:\Apps\MyApps\SnakeScreensaver
 ```
 
 .NET 10.0 (TargetFramework=net10.0-windows, UseWPF=true, UseWindowsForms=true).
@@ -57,6 +57,8 @@ App.xaml                  — стили (TrayBtn, TrayBtnQuit, TrayExpander, Tr
 ```
 
 ## Текущее состояние багов
+
+- ✅ **Публикация 2026-11-14:** `ПУБЛИШ.bat` публикует в `C:\Apps\MyApps\SnakeScreensaver`, путь к проекту берёт относительно батника. Старый `publish` удаляет пользователь; публикацию он запускает сам. Код приложения не менялся.
 
 - ⏳ **Стиль Brutal 2026-11-12:** Settings.Style (Classic/Brutal), код в Snake/SnakeGameBrutal.cs,
   ветки `if (Brutal)` в отрисовке шариков/ленты/еды/головы. Не закоммичено, ждёт оценки
@@ -281,3 +283,4 @@ DropShadowEffect).
 - PLAN.md — детальный план/история багов и фиксов.
 - `%TEMP%\SnakeScreensaver.log` — живой лог работы приложения.
 - `ПУБЛИШ.bat` — скрипт публикации single-file (пользовательский, не удалять).
+

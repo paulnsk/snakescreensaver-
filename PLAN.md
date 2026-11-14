@@ -1,10 +1,14 @@
-# PLAN.md — SnakeScreensaver: текущее состояние и баги
+﻿# PLAN.md — SnakeScreensaver: текущее состояние и баги
 
 ## Что это
 
 WPF-приложение (.NET 10), сидящее в трее. Змейка-скринсейвер играет сама в себя
 поверх прозрачного окна на весь рабочий стол. Никакого виндового screensaver-API —
 чисто tray-app с авто-запуском-змейки по idle-таймеру.
+
+## Публикация (2026-11-14)
+
+`ПУБЛИШ.bat` направляет single-file сборку в `C:\Apps\MyApps\SnakeScreensaver`, а не в репозиторий. Пользователь сам удаляет старый `publish` и запускает публикацию. Код приложения не менялся.
 
 ## Структура проекта
 
@@ -436,3 +440,4 @@ D:\d\SnakeScreensaver\publish\SnakeScreensaver.exe
 - **Skia DropShadow в Skia-режиме серый:** `SKImageFilter.CreateBlur` на `SKPaint_color.WithAlpha(120-160)`
   даёт бледно-серое. В Turbo — цветная тень (radial gradient halo). Не дублировать в Skia
   без запроса.
+
