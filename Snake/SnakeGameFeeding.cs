@@ -596,6 +596,7 @@ public partial class SnakeGame
         var samples = _ribbonSamples;
         var left = new List<Point>(samples.Count);
         var right = new List<Point>(samples.Count);
+        var distances = new List<double>(samples.Count);
         var distance = 0.0;
         var head = samples[0];
         var tail = samples[^1];
@@ -612,8 +613,18 @@ public partial class SnakeGame
             if (length < 0.001) continue;
             var color = hue;
             var radius = Cell * 0.39 * TurboDigestScale(distance, ref color);
-            left.Add(new Point(samples[i].X - dy / length * radius, samples[i].Y + dx / length * radius));
-            right.Add(new Point(samples[i].X + dy / length * radius, samples[i].Y - dx / length * radius));
+            var l = new Point(samples[i].X - dy / length * radius, samples[i].Y + dx / length * radius);
+            var r = new Point(samples[i].X + dy / length * radius, samples[i].Y - dx / length * radius);
+            if (left.Count >= 2 && OnChord(left[^2], left[^1], l) && OnChord(right[^2], right[^1], r))
+            {
+                left[^1] = l;
+                right[^1] = r;
+                distances[^1] = distance;
+                continue;
+            }
+            left.Add(l);
+            right.Add(r);
+            distances.Add(distance);
         }
         if (left.Count < 2) return;
         var geo = new StreamGeometry();
@@ -629,7 +640,7 @@ public partial class SnakeGame
         if (Len(head, tail) < 0.01) tail = new Point(head.X + 1, head.Y);
         if (Brutal)
         {
-            TurboDrawBrutalDigestingRibbon(dc, geo, left, right, head, tail);
+            TurboDrawBrutalDigestingRibbon(dc, geo, left, right, distances, head, tail);
             return;
         }
         var fill = new LinearGradientBrush { StartPoint = head, EndPoint = tail, MappingMode = BrushMappingMode.Absolute };

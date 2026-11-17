@@ -31,7 +31,6 @@ public partial class SnakeGame
         GradientOrigin = new Point(0.35, 0.3)
     });
     private static readonly Geometry HexGeometry = CreateHexGeometry();
-    private double _ribbonTraveled;
 
     private static bool Brutal => Settings.Style == Settings.SnakeStyle.Brutal;
 
@@ -66,7 +65,7 @@ public partial class SnakeGame
         Brush body = key switch
         {
             HazardNut => new LinearGradientBrush(Color.FromRgb(0xFF, 0xE4, 0x5C), Color.FromRgb(0xE0, 0xA8, 0x00), 45),
-            ShadowNut => Brushes.Black,
+            ShadowNut => new SolidColorBrush(Color.FromArgb(115, 0, 0, 0)),
             _ => SteelBrush
         };
         var visual = new DrawingVisual();
@@ -115,24 +114,65 @@ public partial class SnakeGame
                 var nut = GetNutImage(key, radius);
                 var size = nut.Width * r / radius;
                 dc.PushTransform(new RotateTransform(i * 20 + t * 30, x, y));
-                if (pass == 0) dc.PushOpacity(0.45);
                 dc.DrawImage(nut, new Rect(x - size / 2, y - size / 2, size, size));
-                if (pass == 0) dc.Pop();
                 dc.Pop();
             }
         }
     }
 
-    private System.Windows.Media.Pen HazardBandPen(double width)
+    private const double ClampPeriod = Cell * 2.5;
+    private const double ClampLength = Cell * 0.42;
+    private const double ClampStart = Cell * 1.3;
+
+    private static System.Windows.Media.Pen ClampPen(Brush brush, double width, double length)
     {
-        var period = 1.6;
-        var pen = new System.Windows.Media.Pen(SparkBrush, width)
+        var start = ClampStart - (length - ClampLength) / 2;
+        var pen = new System.Windows.Media.Pen(brush, width)
         {
-            DashStyle = new DashStyle(new[] { 0.8, 0.8 }, -(_ribbonTraveled / width % period)),
+            DashStyle = new DashStyle(new[] { length / width, (ClampPeriod - length) / width }, (ClampPeriod - start) / width),
             DashCap = PenLineCap.Flat
         };
         pen.Freeze();
         return pen;
+    }
+
+    private static Point AlongSide(List<Point> side, List<double> distances, int i, double s)
+    {
+        var k = (s - distances[i]) / Math.Max(0.0001, distances[i + 1] - distances[i]);
+        return new Point(side[i].X + (side[i + 1].X - side[i].X) * k, side[i].Y + (side[i + 1].Y - side[i].Y) * k);
+    }
+
+    private static void TurboDrawBrutalClamps(DrawingContext dc, List<Point> bodyLeft, List<Point> bodyRight, List<double> distances)
+    {
+        var left = new List<Point>(bodyLeft.Count);
+        var right = new List<Point>(bodyRight.Count);
+        for (int j = 0; j < bodyLeft.Count; j++)
+        {
+            var mid = new Point((bodyLeft[j].X + bodyRight[j].X) / 2, (bodyLeft[j].Y + bodyRight[j].Y) / 2);
+            left.Add(mid + (bodyLeft[j] - mid) * 1.2);
+            right.Add(mid + (bodyRight[j] - mid) * 1.2);
+        }
+        var geo = new StreamGeometry();
+        using (var ctx = geo.Open())
+        {
+            var i = 0;
+            for (var s = ClampStart; s + ClampLength < distances[^1]; s += ClampPeriod)
+            {
+                if (s < distances[0]) continue;
+                var e = s + ClampLength;
+                while (distances[i + 1] <= s) i++;
+                var k = i;
+                while (distances[k + 1] <= e) k++;
+                ctx.BeginFigure(AlongSide(left, distances, i, s), true, true);
+                for (int j = i + 1; j <= k; j++) ctx.LineTo(left[j], true, true);
+                ctx.LineTo(AlongSide(left, distances, k, e), true, true);
+                ctx.LineTo(AlongSide(right, distances, k, e), true, true);
+                for (int j = k; j > i; j--) ctx.LineTo(right[j], true, true);
+                ctx.LineTo(AlongSide(right, distances, i, s), true, true);
+            }
+        }
+        geo.Freeze();
+        dc.DrawGeometry(SparkBrush, InkPen, geo);
     }
 
     private void TurboDrawBrutalRibbon(DrawingContext dc, Geometry geo)
@@ -152,11 +192,12 @@ public partial class SnakeGame
         cable.Freeze();
         dc.DrawGeometry(null, ink, geo);
         dc.DrawGeometry(null, cable, geo);
-        dc.DrawGeometry(null, HazardBandPen(width * 0.72), geo);
+        dc.DrawGeometry(null, ClampPen(InkBrush, width + 9, ClampLength + 4), geo);
+        dc.DrawGeometry(null, ClampPen(SparkBrush, width + 5, ClampLength), geo);
     }
 
     private void TurboDrawBrutalDigestingRibbon(DrawingContext dc, Geometry body, List<Point> left, List<Point> right,
-        Point head, Point tail)
+        List<double> distances, Point head, Point tail)
     {
         if (Settings.DropShadow)
         {
@@ -165,20 +206,7 @@ public partial class SnakeGame
             dc.Pop();
         }
         dc.DrawGeometry(CableBrush, null, body);
-        var center = new StreamGeometry();
-        using (var ctx = center.Open())
-        {
-            for (int i = 0; i < left.Count; i++)
-            {
-                var p = new Point((left[i].X + right[i].X) / 2, (left[i].Y + right[i].Y) / 2);
-                if (i == 0) ctx.BeginFigure(p, false, false);
-                else ctx.LineTo(p, true, true);
-            }
-        }
-        center.Freeze();
-        dc.PushClip(body);
-        dc.DrawGeometry(null, HazardBandPen(Cell * 0.56), center);
-        dc.Pop();
+        TurboDrawBrutalClamps(dc, left, right, distances);
         var outline = new System.Windows.Media.Pen(InkBrush, 2.5) { LineJoin = PenLineJoin.Round };
         outline.Freeze();
         dc.DrawGeometry(null, outline, body);

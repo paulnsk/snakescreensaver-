@@ -223,6 +223,16 @@ public partial class SnakeGame
         }
     }
 
+    private static bool OnChord(Point a, Point p, Point b)
+    {
+        var dx = b.X - a.X;
+        var dy = b.Y - a.Y;
+        var len2 = dx * dx + dy * dy;
+        var cross = (p.X - a.X) * dy - (p.Y - a.Y) * dx;
+        var dot = (p.X - a.X) * dx + (p.Y - a.Y) * dy;
+        return cross * cross <= 0.01 * len2 && dot >= 0 && dot <= len2;
+    }
+
     private void TurboDrawRibbon(DrawingContext dc, SnakeTurboCanvas canvas, double t)
     {
         if (_ribbonSamples.Count < 2 || !_ribbonReady) return;
@@ -235,12 +245,18 @@ public partial class SnakeGame
         var tail = _ribbonSamples[^1];
         if (Len(head, tail) < 0.001) tail = new Point(head.X + 1, head.Y);
 
+        var points = new List<Point>(_ribbonSamples.Count) { head };
+        for (int i = 1; i < _ribbonSamples.Count; i++)
+        {
+            if (points.Count >= 2 && OnChord(points[^2], points[^1], _ribbonSamples[i])) points[^1] = _ribbonSamples[i];
+            else points.Add(_ribbonSamples[i]);
+        }
         var geo = new StreamGeometry();
         using (var ctx = geo.Open())
         {
             ctx.BeginFigure(head, false, false);
-            for (int i = 1; i < _ribbonSamples.Count; i++)
-                ctx.LineTo(_ribbonSamples[i], true, true);
+            for (int i = 1; i < points.Count; i++)
+                ctx.LineTo(points[i], true, true);
         }
         geo.Freeze();
         if (Brutal)

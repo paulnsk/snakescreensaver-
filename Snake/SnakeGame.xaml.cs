@@ -20,7 +20,11 @@ public partial class SnakeGame : UserControl
     private bool _started;
     private bool _dead;
     private double _deadAt;
-    private double Now => _sw.Elapsed.TotalSeconds;
+    private const double FrameStep = 1.0 / 60;
+    private double _clock;
+    private double _lastFrameReal;
+    private double _avgFrame = FrameStep;
+    private double Now => _clock;
 
     private Settings.RenderMode _mode = Settings.RenderMode.Balls;
     private bool _rainbow = true;
@@ -86,6 +90,11 @@ public partial class SnakeGame : UserControl
 
     private void OnRender(object? sender, EventArgs e)
     {
+        var real = _sw.Elapsed.TotalSeconds;
+        if (real - _lastFrameReal < FrameStep * 0.75) return;
+        _avgFrame += (Math.Min(0.1, real - _lastFrameReal) - _avgFrame) * 0.03;
+        _lastFrameReal = real;
+        _clock += _avgFrame;
         var t = Now;
         if (_dead)
         {
@@ -285,7 +294,6 @@ public partial class SnakeGame : UserControl
         var head = _ribbonSamples[0];
         var newHead = new Point(head.X + _ribbonDir.dx * _ribbonSpeed * dt, head.Y + _ribbonDir.dy * _ribbonSpeed * dt);
         _ribbonSamples.Insert(0, newHead);
-        _ribbonTraveled += _ribbonSpeed * dt;
 
         var nc = PixelToCell(newHead);
         if (nc.X != _ribbonHeadCell.X || nc.Y != _ribbonHeadCell.Y)
